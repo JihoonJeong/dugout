@@ -47,7 +47,9 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [predicting, setPredicting] = useState(false);
-  const { timeLeft, isLocked } = useCountdown(game.game_datetime_utc);
+  const [serverLocked, setServerLocked] = useState(false);
+  const { timeLeft, isLocked: countdownLocked } = useCountdown(game.game_datetime_utc);
+  const isLocked = countdownLocked || serverLocked;
   const [submitted, setSubmitted] = useState(!!game.user_prediction);
 
   const awayName = teamNames[game.away_team_id] || game.away_team_id;
@@ -87,9 +89,16 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
         onPredictionSubmit?.();
       } else if (res.detail) {
         setSubmitError(res.detail);
+        if (res.detail.toLowerCase().includes('closed') || res.detail.toLowerCase().includes('locked')) {
+          setServerLocked(true);
+        }
       }
     } catch (e) {
-      setSubmitError(e.message || 'Failed to submit prediction');
+      const msg = e.message || 'Failed to submit prediction';
+      setSubmitError(msg);
+      if (msg.toLowerCase().includes('closed') || msg.toLowerCase().includes('locked')) {
+        setServerLocked(true);
+      }
     }
     setSubmitting(false);
   }
