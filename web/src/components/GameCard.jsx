@@ -266,11 +266,13 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
                   </div>
                 )}
 
-                <AIAnalysis game={game} />
               </>
             ) : (
               <div className="text-xs text-slate-500 mb-3 text-center">{game.venue}</div>
             )}
+
+            {/* AI Analysis — always available */}
+            <AIAnalysis game={game} />
 
             <div className="flex gap-2 mt-3">
               {!hasPred && (

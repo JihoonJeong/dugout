@@ -26,6 +26,17 @@ def build_analysis_prompt(context: MatchupContext) -> str:
             parts.append(f"{context.home_team_id} starter uses {context.home_starter_fallback} data")
         fallback_note = f"\nNote: {'; '.join(parts)} — actual starter stats may differ."
 
+    # 엔진 예측이 있으면 포함
+    engine_section = ""
+    has_engine = context.engine_avg_total_runs > 0
+    if has_engine:
+        engine_section = f"""
+## Engine Simulation (Monte Carlo)
+Win probability: {context.away_team_id} {context.engine_away_win_pct:.1%} | {context.home_team_id} {context.engine_home_win_pct:.1%}
+Projected score: {context.engine_avg_away_runs:.1f} - {context.engine_avg_home_runs:.1f}
+Projected total: {context.engine_avg_total_runs:.1f} runs
+"""
+
     return f"""Analyze this MLB matchup and provide your prediction.
 
 ## Matchup
@@ -38,12 +49,7 @@ Away: {context.away_starter_name}
 
 Home: {context.home_starter_name}
   K%: {context.home_starter_k_rate:.1%} | BB%: {context.home_starter_bb_rate:.1%} | HR/BIP: {context.home_starter_hr_rate:.1%}
-
-## Engine Simulation (1,000 Monte Carlo runs)
-Win probability: {context.away_team_id} {context.engine_away_win_pct:.1%} | {context.home_team_id} {context.engine_home_win_pct:.1%}
-Projected score: {context.engine_avg_away_runs:.1f} - {context.engine_avg_home_runs:.1f}
-Projected total: {context.engine_avg_total_runs:.1f} runs
-{fallback_note}
+{engine_section}{fallback_note}
 
 ## Instructions
 Provide your analysis as JSON with this exact structure:
@@ -61,4 +67,4 @@ Important:
 - confidence should reflect genuine uncertainty (most games are 0.52-0.65)
 - predicted_winner must be exactly "away" or "home"
 - key_factors should be 3-5 specific, actionable factors
-- Consider both the simulation data and your baseball knowledge"""
+- Consider simulation data (if provided) and your baseball knowledge"""
