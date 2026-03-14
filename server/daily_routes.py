@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 
 from daily.manager import Manager, ManagerStore
 from daily.pipeline import DailyDataPipeline, DailyGame
+from daily.pipelines.kbo import KBOPipeline
+from daily.pipelines.npb import NPBPipeline
 from daily.predictor import DailyPredictor, GamePrediction
 from daily.store import PredictionStore, UserPrediction
 from data.pipeline import DugoutData
@@ -22,6 +24,8 @@ router = APIRouter(prefix="/daily", tags=["daily"])
 
 # Module-level state (set during lifespan)
 _pipeline: DailyDataPipeline | None = None
+_kbo_pipeline: KBOPipeline | None = None
+_npb_pipeline: NPBPipeline | None = None
 _predictor: DailyPredictor | None = None
 _store: PredictionStore | None = None
 _manager_store: ManagerStore | None = None
@@ -30,12 +34,14 @@ _prediction_cache: dict[str, list[GamePrediction]] = {}  # date → predictions
 
 def init_daily(data: DugoutData) -> None:
     """서버 시작 시 호출."""
-    global _pipeline, _predictor, _store, _manager_store
+    global _pipeline, _kbo_pipeline, _npb_pipeline, _predictor, _store, _manager_store
     _pipeline = DailyDataPipeline()
+    _kbo_pipeline = KBOPipeline()
+    _npb_pipeline = NPBPipeline()
     _predictor = DailyPredictor(data)
     _store = PredictionStore()
     _manager_store = ManagerStore()
-    logger.info("Daily prediction module initialized")
+    logger.info("Daily prediction module initialized (MLB + KBO + NPB)")
 
 
 # ── Pydantic Models ──────────────────────────────────────
@@ -77,7 +83,7 @@ class GameCardResponse(BaseModel):
 
 
 class PredictionRequest(BaseModel):
-    game_id: int
+    game_id: int | str
     game_date: str
     predicted_winner: str  # "away" | "home"
     predicted_away_score: Optional[int] = None
@@ -157,16 +163,71 @@ class MyStatsResponse(BaseModel):
     engine_accuracy: float = 0.0
 
 
+# ── Helpers ──────────────────────────────────────────────
+
+def _fetch_all_games(target_date: date) -> list[DailyGame]:
+    """모든 리그의 경기를 수집."""
+    all_games: list[DailyGame] = []
+
+    if _pipeline:
+        try:
+            all_games.extend(_pipeline.fetch_games(target_date))
+        except Exception as e:
+            logger.warning("MLB fetch failed: %s", e)
+
+    if _kbo_pipeline:
+        try:
+            all_games.extend(_kbo_pipeline.fetch_games(target_date))
+        except Exception as e:
+            logger.warning("KBO fetch failed: %s", e)
+
+    if _npb_pipeline:
+        try:
+            all_games.extend(_npb_pipeline.fetch_games(target_date))
+        except Exception as e:
+            logger.warning("NPB fetch failed: %s", e)
+
+    return all_games
+
+
+def _fetch_all_results(target_date: date) -> list:
+    """모든 리그의 결과를 수집."""
+    from daily.pipelines.base import DailyResult
+    all_results: list[DailyResult] = []
+
+    if _pipeline:
+        try:
+            all_results.extend(_pipeline.fetch_yesterday_results()
+                               if target_date == date.today() - timedelta(days=1)
+                               else [])
+        except Exception as e:
+            logger.warning("MLB results fetch failed: %s", e)
+
+    if _kbo_pipeline:
+        try:
+            all_results.extend(_kbo_pipeline.fetch_results(target_date))
+        except Exception as e:
+            logger.warning("KBO results fetch failed: %s", e)
+
+    if _npb_pipeline:
+        try:
+            all_results.extend(_npb_pipeline.fetch_results(target_date))
+        except Exception as e:
+            logger.warning("NPB results fetch failed: %s", e)
+
+    return all_results
+
+
 # ── Endpoints ────────────────────────────────────────────
 
 @router.get("/games/today")
 def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardResponse]:
-    """오늘 경기 스케줄 (시뮬레이션 없이 빠르게 반환)."""
+    """오늘 경기 스케줄 — 모든 리그 (시뮬레이션 없이 빠르게 반환)."""
     if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
     today_str = date.today().isoformat()
-    games = _pipeline.fetch_today()
+    games = _fetch_all_games(date.today())
 
     if not games:
         return []
@@ -186,7 +247,7 @@ def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardRes
 
 @router.get("/games/{target_date}")
 def get_games_by_date(target_date: str, manager_id: Optional[str] = Query(None)) -> list[GameCardResponse]:
-    """특정 날짜 경기 스케줄."""
+    """특정 날짜 경기 스케줄 — 모든 리그."""
     if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
@@ -195,7 +256,7 @@ def get_games_by_date(target_date: str, manager_id: Optional[str] = Query(None))
     except ValueError:
         raise HTTPException(400, "Invalid date format. Use YYYY-MM-DD")
 
-    games = _pipeline.fetch_games(dt)
+    games = _fetch_all_games(dt)
     if not games:
         return []
 
@@ -212,8 +273,8 @@ def get_games_by_date(target_date: str, manager_id: Optional[str] = Query(None))
 
 
 @router.post("/games/{game_id}/predict")
-def predict_single_game(game_id: int, game_date: str = Query(...)) -> GameCardResponse:
-    """단일 경기 엔진 예측 (on-demand)."""
+def predict_single_game(game_id: str, game_date: str = Query(...)) -> GameCardResponse:
+    """단일 경기 엔진 예측 (on-demand). MLB만 지원."""
     if _pipeline is None or _predictor is None:
         raise HTTPException(500, "Daily module not initialized")
 
@@ -222,16 +283,26 @@ def predict_single_game(game_id: int, game_date: str = Query(...)) -> GameCardRe
     except ValueError:
         raise HTTPException(400, "Invalid date format")
 
-    games = _pipeline.fetch_games(dt)
-    game = next((g for g in games if g.game_id == game_id), None)
+    # game_id를 int로 변환 시도 (MLB은 int, KBO/NPB는 string)
+    try:
+        gid: int | str = int(game_id)
+    except ValueError:
+        gid = game_id
+
+    games = _fetch_all_games(dt)
+    game = next((g for g in games if g.game_id == gid), None)
     if game is None:
         raise HTTPException(404, f"Game {game_id} not found on {game_date}")
+
+    # KBO/NPB는 아직 엔진 예측 미지원
+    if game.league_id != "mlb":
+        return _build_game_card(game, None, None)
 
     # 캐시 확인
     if game_date in _prediction_cache:
         cached = {p.game_id: p for p in _prediction_cache[game_date]}
-        if game_id in cached:
-            return _build_game_card(game, cached[game_id], None)
+        if gid in cached:
+            return _build_game_card(game, cached[gid], None)
 
     # 단일 경기 시뮬레이션
     pred = _predictor.predict_game(game, n_sims=200)
@@ -239,8 +310,7 @@ def predict_single_game(game_id: int, game_date: str = Query(...)) -> GameCardRe
     # 캐시에 추가
     if game_date not in _prediction_cache:
         _prediction_cache[game_date] = []
-    # 기존 캐시에서 같은 game_id 제거 후 추가
-    _prediction_cache[game_date] = [p for p in _prediction_cache[game_date] if p.game_id != game_id]
+    _prediction_cache[game_date] = [p for p in _prediction_cache[game_date] if p.game_id != gid]
     _prediction_cache[game_date].append(pred)
 
     return _build_game_card(game, pred, None)
@@ -293,7 +363,7 @@ def submit_prediction(req: PredictionRequest) -> dict:
     except ValueError:
         raise HTTPException(400, "Invalid date format")
 
-    games = _pipeline.fetch_games(dt)
+    games = _fetch_all_games(dt)
     game = next((g for g in games if g.game_id == req.game_id), None)
     if game is None:
         raise HTTPException(404, f"Game {req.game_id} not found on {req.game_date}")
@@ -342,14 +412,14 @@ def update_prediction(prediction_id: str, req: PredictionUpdateRequest) -> dict:
 
 @router.get("/results/yesterday")
 def get_yesterday_results(manager_id: Optional[str] = Query(None)) -> list[ResultCardResponse]:
-    """어제 결과 + 내 예측 비교."""
+    """어제 결과 + 내 예측 비교 — 모든 리그."""
     if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
     yesterday = date.today() - timedelta(days=1)
     yesterday_str = yesterday.isoformat()
 
-    results = _pipeline.fetch_yesterday_results()
+    results = _fetch_all_results(yesterday)
     all_user_preds = _store.get_by_date(yesterday_str)
     if manager_id is not None:
         all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
