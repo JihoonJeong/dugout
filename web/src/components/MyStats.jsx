@@ -30,7 +30,7 @@ export default function MyStats({ onClose }) {
             <button onClick={onClose} className="text-slate-400 hover:text-white text-sm">✕</button>
           )}
         </div>
-        <p className="text-slate-400 text-center">No predictions yet. Start picking today's games!</p>
+        <p className="text-slate-400 text-center">{t('stats.noPredictions')}</p>
       </div>
     );
   }
@@ -40,7 +40,7 @@ export default function MyStats({ onClose }) {
   return (
     <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-white">My Stats</h2>
+        <h2 className="text-lg font-bold text-white">{t('stats.title')}</h2>
         {onClose && (
           <button onClick={onClose} className="text-slate-400 hover:text-white text-sm">✕</button>
         )}

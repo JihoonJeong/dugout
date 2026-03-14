@@ -83,7 +83,8 @@
     "avgPoints": "Avg Points",
     "totalPoints": "Total Points",
     "exactScores": "Exact Scores",
-    "regularOnly": "Regular season only"
+    "regularOnly": "Regular season only",
+    "noPredictions": "No predictions yet. Start picking today's games!"
   },
   "leaderboard": {
     "title": "Leaderboard",
