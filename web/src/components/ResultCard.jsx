@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export default function ResultCard({ result, teamNames }) {
   const awayName = teamNames[result.away_team_id] || result.away_team_id;
   const homeName = teamNames[result.home_team_id] || result.home_team_id;
@@ -95,6 +97,11 @@ export default function ResultCard({ result, teamNames }) {
           </div>
         )}
 
+        {/* Scoring plays */}
+        {result.scoring_plays?.length > 0 && (
+          <ScoringPlays plays={result.scoring_plays} />
+        )}
+
         {/* Prediction results */}
         <div className="border-t border-slate-700 pt-3 grid grid-cols-2 gap-3">
           {/* Engine */}
@@ -187,6 +194,40 @@ export default function ResultCard({ result, teamNames }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ScoringPlays({ plays }) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? plays : plays.slice(0, 3);
+
+  return (
+    <div className="bg-slate-900/40 rounded-lg p-2.5 mb-3">
+      <div
+        className="flex items-center justify-between cursor-pointer"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className="text-xs text-slate-400 uppercase tracking-wider">Scoring Plays</span>
+        {plays.length > 3 && (
+          <span className="text-xs text-slate-500">{expanded ? 'collapse' : `+${plays.length - 3} more`}</span>
+        )}
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {shown.map((play, i) => {
+          const isHR = play.event === 'Home Run';
+          return (
+            <div key={i} className="text-xs flex gap-2">
+              <span className="text-slate-500 shrink-0 w-14 text-right">
+                {play.half === 'top' ? '▲' : '▼'} {play.inning}
+              </span>
+              <span className={`${isHR ? 'text-amber-400' : 'text-slate-300'}`}>
+                {isHR && '💣 '}{play.description}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

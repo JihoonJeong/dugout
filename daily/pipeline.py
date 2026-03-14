@@ -62,6 +62,10 @@ class DailyResult:
     losing_pitcher: str = ""
     save_pitcher: str = ""
 
+    # scoring plays
+    scoring_plays: list[dict] = field(default_factory=list)
+    # [{"inning": 3, "half": "bottom", "event": "Home Run", "description": "...", "rbi": 2}, ...]
+
 
 class DailyDataPipeline:
     """MLB Stats API에서 일일 경기 데이터를 수집."""
@@ -244,6 +248,32 @@ class DailyDataPipeline:
                     losing_pitcher=lp,
                     save_pitcher=sv,
                 ))
+
+        # Scoring plays 추가 (경기당 1회 API 호출)
+        for r in results:
+            try:
+                game_data = statsapi.get("game", {"gamePk": r.game_id})
+                plays = game_data.get("liveData", {}).get("plays", {})
+                all_plays = plays.get("allPlays", [])
+                scoring_indices = plays.get("scoringPlays", [])
+
+                for idx in scoring_indices:
+                    if idx >= len(all_plays):
+                        continue
+                    play = all_plays[idx]
+                    result_data = play.get("result", {})
+                    about = play.get("about", {})
+                    r.scoring_plays.append({
+                        "inning": about.get("inning", 0),
+                        "half": about.get("halfInning", ""),
+                        "event": result_data.get("event", ""),
+                        "description": result_data.get("description", ""),
+                        "rbi": result_data.get("rbi", 0),
+                    })
+            except Exception as e:
+                logger.warning("Failed to fetch scoring plays for game %d: %s", r.game_id, e)
+
+        logger.info("Fetched scoring plays for %d results", len(results))
 
         # 캐시 저장
         with open(cache_path, "w") as f:
