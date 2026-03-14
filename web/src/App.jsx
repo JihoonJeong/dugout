@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getManagerId } from './api';
+import ManagerSetup from './components/ManagerSetup';
 import DailyHome from './components/DailyHome';
 import GameSetup from './components/GameSetup';
 import GameHeader from './components/GameHeader';
@@ -10,6 +12,9 @@ import SpeedControl from './components/SpeedControl';
 import { createGame, advanceGame, sendDecision, getBoxScore, getLog } from './api';
 
 export default function App() {
+  // Manager registration
+  const [hasManager, setHasManager] = useState(!!getManagerId());
+
   // Top-level mode: daily | sim
   const [mode, setMode] = useState('daily');
 
@@ -108,6 +113,11 @@ export default function App() {
     }, 2000);
     return () => clearInterval(t);
   }, [gameId, screen]);
+
+  // Manager registration
+  if (!hasManager) {
+    return <ManagerSetup onComplete={() => setHasManager(true)} />;
+  }
 
   // Daily mode
   if (mode === 'daily') {

@@ -31,6 +31,7 @@ class UserPrediction:
     updated_at: str = ""
     locked: bool = False
     game_type: str = "R"  # "R" = Regular, "S" = Spring Training
+    manager_id: str = ""  # 감독 ID (빈 문자열 = 미지정)
 
     # 실제 결과 (나중에 채워짐)
     actual_winner: Optional[str] = None
@@ -79,13 +80,14 @@ class PredictionStore:
         predicted_home_score: int | None = None,
         confidence: float | None = None,
         game_type: str = "R",
+        manager_id: str = "",
     ) -> UserPrediction:
         """예측 제출."""
         predictions = self._load_date(game_date)
 
         # 이미 해당 경기에 예측이 있으면 에러
         for p in predictions:
-            if p["game_id"] == game_id:
+            if p["game_id"] == game_id and p.get("manager_id", "") == manager_id:
                 if p.get("locked"):
                     raise ValueError(f"Prediction for game {game_id} is locked")
                 raise ValueError(f"Prediction already exists for game {game_id}. Use update.")
@@ -104,6 +106,7 @@ class PredictionStore:
             created_at=now,
             updated_at=now,
             game_type=game_type,
+            manager_id=manager_id,
         )
 
         predictions.append(asdict(pred))
@@ -205,8 +208,12 @@ class PredictionStore:
             self._save_date(game_date, predictions)
         return result_breakdown
 
-    def get_cumulative_stats(self) -> CumulativeStats:
-        """전체 누적 성적 계산 (정규시즌만)."""
+    def get_cumulative_stats(self, manager_id: str | None = None) -> CumulativeStats:
+        """전체 누적 성적 계산 (정규시즌만).
+
+        Args:
+            manager_id: 특정 감독의 성적만 조회. None이면 전체.
+        """
         stats = CumulativeStats()
 
         for path in sorted(self._store_dir.glob("*.json")):
@@ -216,6 +223,9 @@ class PredictionStore:
             for p in predictions:
                 # 스프링 트레이닝은 누적 성적에서 제외
                 if p.get("game_type", "R") == "S":
+                    continue
+                # 감독 필터
+                if manager_id is not None and p.get("manager_id", "") != manager_id:
                     continue
                 stats.total_predictions += 1
                 if p.get("actual_winner") is not None:
@@ -231,6 +241,37 @@ class PredictionStore:
                     stats.total_calibration_points += p.get("score_calibration", 0)
 
         return stats
+
+    def get_leaderboard(self, manager_store) -> list[dict]:
+        """전체 감독 리더보드 (정규시즌만).
+
+        Args:
+            manager_store: ManagerStore instance to get manager info.
+
+        Returns:
+            Sorted list of dicts with manager stats, by avg_points descending.
+        """
+        managers = manager_store.get_all()
+        leaderboard = []
+
+        for mgr in managers:
+            stats = self.get_cumulative_stats(manager_id=mgr.manager_id)
+            if stats.total_scored < 1:
+                continue
+            leaderboard.append({
+                "manager_id": mgr.manager_id,
+                "nickname": mgr.nickname,
+                "total_scored": stats.total_scored,
+                "wins_correct": stats.wins_correct,
+                "wins_total": stats.wins_total,
+                "win_accuracy": stats.win_accuracy,
+                "avg_points": stats.avg_points,
+                "total_points": stats.total_points,
+                "exact_scores": stats.exact_scores,
+            })
+
+        leaderboard.sort(key=lambda x: x["avg_points"], reverse=True)
+        return leaderboard
 
     def get_date_results(self, game_date: str) -> list[dict]:
         """특정 날짜의 채점 상세 결과."""

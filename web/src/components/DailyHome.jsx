@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { getDailyGames, getYesterdayResults } from '../api';
+import { getDailyGames, getYesterdayResults, getManagerNickname } from '../api';
 import GameCard from './GameCard';
 import ResultCard from './ResultCard';
 import MyStats from './MyStats';
 import Settings from './Settings';
+import Leaderboard from './Leaderboard';
 
 const TEAM_NAMES = {
   NYY: 'Yankees', BOS: 'Red Sox', TBR: 'Rays', BAL: 'Orioles', TOR: 'Blue Jays',
@@ -22,6 +23,8 @@ export default function DailyHome({ onNavigateToGame }) {
   const [selectedGame, setSelectedGame] = useState(null);
   const [showStats, setShowStats] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const managerName = getManagerNickname();
 
   useEffect(() => {
     loadData();
@@ -55,7 +58,10 @@ export default function DailyHome({ onNavigateToGame }) {
               <h1 className="text-2xl font-bold text-white">
                 <span className="text-amber-400">⚾</span> Dugout Daily
               </h1>
-              <p className="text-slate-400 text-sm mt-1">{today}</p>
+              <p className="text-slate-400 text-sm mt-1">
+                {today}
+                {managerName && <span className="text-amber-400/70 ml-2">— Mgr. {managerName}</span>}
+              </p>
             </div>
             <div className="flex gap-2">
               <button
@@ -106,6 +112,16 @@ export default function DailyHome({ onNavigateToGame }) {
             >
               Stats
             </button>
+            <button
+              onClick={() => setShowLeaderboard(s => !s)}
+              className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                showLeaderboard
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Ranks
+            </button>
           </div>
         </div>
       </div>
@@ -121,6 +137,12 @@ export default function DailyHome({ onNavigateToGame }) {
         {showStats && (
           <div className="mb-6">
             <MyStats onClose={() => setShowStats(false)} />
+          </div>
+        )}
+
+        {showLeaderboard && (
+          <div className="mb-6">
+            <Leaderboard onClose={() => setShowLeaderboard(false)} />
           </div>
         )}
 

@@ -7,9 +7,10 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from daily.manager import Manager, ManagerStore
 from daily.pipeline import DailyDataPipeline, DailyGame
 from daily.predictor import DailyPredictor, GamePrediction
 from daily.store import PredictionStore, UserPrediction
@@ -23,15 +24,17 @@ router = APIRouter(prefix="/daily", tags=["daily"])
 _pipeline: DailyDataPipeline | None = None
 _predictor: DailyPredictor | None = None
 _store: PredictionStore | None = None
+_manager_store: ManagerStore | None = None
 _prediction_cache: dict[str, list[GamePrediction]] = {}  # date → predictions
 
 
 def init_daily(data: DugoutData) -> None:
     """서버 시작 시 호출."""
-    global _pipeline, _predictor, _store
+    global _pipeline, _predictor, _store, _manager_store
     _pipeline = DailyDataPipeline()
     _predictor = DailyPredictor(data)
     _store = PredictionStore()
+    _manager_store = ManagerStore()
     logger.info("Daily prediction module initialized")
 
 
@@ -75,6 +78,7 @@ class PredictionRequest(BaseModel):
     predicted_away_score: Optional[int] = None
     predicted_home_score: Optional[int] = None
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    manager_id: Optional[str] = None
 
 
 class PredictionUpdateRequest(BaseModel):
@@ -127,7 +131,7 @@ class MyStatsResponse(BaseModel):
 # ── Endpoints ────────────────────────────────────────────
 
 @router.get("/games/today")
-def get_today_games() -> list[GameCardResponse]:
+def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardResponse]:
     """오늘 경기 목록 + 엔진 예측."""
     if _pipeline is None or _predictor is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
@@ -146,7 +150,10 @@ def get_today_games() -> list[GameCardResponse]:
         predictions = _prediction_cache[today_str]
 
     pred_map = {p.game_id: p for p in predictions}
-    user_preds = {p.game_id: p for p in _store.get_by_date(today_str)}
+    all_user_preds = _store.get_by_date(today_str)
+    if manager_id is not None:
+        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
+    user_preds = {p.game_id: p for p in all_user_preds}
 
     result = []
     for game in games:
@@ -276,6 +283,7 @@ def submit_prediction(req: PredictionRequest) -> dict:
             predicted_home_score=req.predicted_home_score,
             confidence=req.confidence,
             game_type=game.game_type,
+            manager_id=req.manager_id or "",
         )
         return {"status": "submitted", "prediction": asdict(pred)}
     except ValueError as e:
@@ -303,7 +311,7 @@ def update_prediction(prediction_id: str, req: PredictionUpdateRequest) -> dict:
 
 
 @router.get("/results/yesterday")
-def get_yesterday_results() -> list[ResultCardResponse]:
+def get_yesterday_results(manager_id: Optional[str] = Query(None)) -> list[ResultCardResponse]:
     """어제 결과 + 내 예측 비교."""
     if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
@@ -312,7 +320,10 @@ def get_yesterday_results() -> list[ResultCardResponse]:
     yesterday_str = yesterday.isoformat()
 
     results = _pipeline.fetch_yesterday_results()
-    user_preds = {p.game_id: p for p in _store.get_by_date(yesterday_str)}
+    all_user_preds = _store.get_by_date(yesterday_str)
+    if manager_id is not None:
+        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
+    user_preds = {p.game_id: p for p in all_user_preds}
 
     # 캐시된 엔진 예측
     engine_preds = {}
@@ -332,7 +343,10 @@ def get_yesterday_results() -> list[ResultCardResponse]:
         )
 
     # reload after scoring
-    user_preds = {p.game_id: p for p in _store.get_by_date(yesterday_str)}
+    all_user_preds = _store.get_by_date(yesterday_str)
+    if manager_id is not None:
+        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
+    user_preds = {p.game_id: p for p in all_user_preds}
 
     response = []
     for r in results:
@@ -377,12 +391,12 @@ def get_yesterday_results() -> list[ResultCardResponse]:
 
 
 @router.get("/my-stats")
-def get_my_stats() -> MyStatsResponse:
+def get_my_stats(manager_id: Optional[str] = Query(None)) -> MyStatsResponse:
     """내 누적 성적."""
     if _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
-    stats = _store.get_cumulative_stats()
+    stats = _store.get_cumulative_stats(manager_id=manager_id)
     return MyStatsResponse(
         total_predictions=stats.total_predictions,
         total_scored=stats.total_scored,
@@ -413,6 +427,46 @@ def get_date_results(target_date: str) -> list[dict]:
         raise HTTPException(400, "Invalid date format. Use YYYY-MM-DD")
 
     return _store.get_date_results(target_date)
+
+
+# ── Manager Endpoints ────────────────────────────────────
+
+class ManagerRegisterRequest(BaseModel):
+    nickname: str
+
+
+@router.post("/managers/register")
+def register_manager(req: ManagerRegisterRequest) -> dict:
+    """새 감독 등록."""
+    if _manager_store is None:
+        raise HTTPException(500, "Daily module not initialized")
+
+    try:
+        mgr = _manager_store.register(req.nickname)
+        return {"manager_id": mgr.manager_id, "nickname": mgr.nickname}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/managers/{manager_id}")
+def get_manager(manager_id: str) -> dict:
+    """감독 정보 조회."""
+    if _manager_store is None:
+        raise HTTPException(500, "Daily module not initialized")
+
+    mgr = _manager_store.get(manager_id)
+    if mgr is None:
+        raise HTTPException(404, f"Manager {manager_id} not found")
+    return {"manager_id": mgr.manager_id, "nickname": mgr.nickname, "created_at": mgr.created_at}
+
+
+@router.get("/leaderboard")
+def get_leaderboard() -> list[dict]:
+    """감독 리더보드."""
+    if _store is None or _manager_store is None:
+        raise HTTPException(500, "Daily module not initialized")
+
+    return _store.get_leaderboard(_manager_store)
 
 
 def _is_locked(game: DailyGame) -> bool:

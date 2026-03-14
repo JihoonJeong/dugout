@@ -47,8 +47,46 @@ export async function getLog(gameId) {
 
 // ── Daily Prediction API ──
 
+// ── Manager API ──
+
+export function getManagerId() {
+  return localStorage.getItem('dugout_manager_id') || '';
+}
+
+export function getManagerNickname() {
+  return localStorage.getItem('dugout_manager_nickname') || '';
+}
+
+export function setManagerLocal(managerId, nickname) {
+  localStorage.setItem('dugout_manager_id', managerId);
+  localStorage.setItem('dugout_manager_nickname', nickname);
+}
+
+export async function registerManager(nickname) {
+  const res = await fetch(`${BASE}/daily/managers/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nickname }),
+  });
+  return res.json();
+}
+
+export async function getManager(managerId) {
+  const res = await fetch(`${BASE}/daily/managers/${managerId}`);
+  return res.json();
+}
+
+export async function getLeaderboard() {
+  const res = await fetch(`${BASE}/daily/leaderboard`);
+  return res.json();
+}
+
+// ── Daily Prediction API ──
+
 export async function getDailyGames(date = 'today') {
-  const url = date === 'today' ? `${BASE}/daily/games/today` : `${BASE}/daily/games/${date}`;
+  const mid = getManagerId();
+  const qs = mid ? `?manager_id=${mid}` : '';
+  const url = date === 'today' ? `${BASE}/daily/games/today${qs}` : `${BASE}/daily/games/${date}${qs}`;
   const res = await fetch(url);
   return res.json();
 }
@@ -64,6 +102,7 @@ export async function submitPrediction({ gameId, gameDate, predictedWinner, pred
       predicted_away_score: predictedAwayScore,
       predicted_home_score: predictedHomeScore,
       confidence,
+      manager_id: getManagerId() || undefined,
     }),
   });
   return res.json();
@@ -85,7 +124,16 @@ export async function updatePrediction(predictionId, { gameDate, predictedWinner
 }
 
 export async function getYesterdayResults() {
-  const res = await fetch(`${BASE}/daily/results/yesterday`);
+  const mid = getManagerId();
+  const qs = mid ? `?manager_id=${mid}` : '';
+  const res = await fetch(`${BASE}/daily/results/yesterday${qs}`);
+  return res.json();
+}
+
+export async function getMyStats() {
+  const mid = getManagerId();
+  const qs = mid ? `?manager_id=${mid}` : '';
+  const res = await fetch(`${BASE}/daily/my-stats${qs}`);
   return res.json();
 }
 

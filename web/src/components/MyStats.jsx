@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-
-const BASE = '';
+import { getMyStats } from '../api';
 
 export default function MyStats({ onClose }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/daily/my-stats`)
-      .then(r => r.json())
+    getMyStats()
       .then(data => { setStats(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
