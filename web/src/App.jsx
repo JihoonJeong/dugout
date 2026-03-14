@@ -121,7 +121,16 @@ export default function App() {
 
   // Daily mode
   if (mode === 'daily') {
-    return <DailyHome onNavigateToGame={() => setMode('sim')} />;
+    return (
+      <DailyHome
+        onNavigateToGame={() => setMode('sim')}
+        onWatchSim={(away, home) => {
+          setMode('sim');
+          // Auto-start spectate with pre-filled teams
+          handleStart({ awayTeamId: away, homeTeamId: home, mode: 'spectate' });
+        }}
+      />
+    );
   }
 
   // Sim mode

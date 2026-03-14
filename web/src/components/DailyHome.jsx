@@ -15,7 +15,7 @@ const TEAM_NAMES = {
   LAD: 'Dodgers', SDP: 'Padres', SFG: 'Giants', ARI: 'D-backs', COL: 'Rockies',
 };
 
-export default function DailyHome({ onNavigateToGame }) {
+export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   const [tab, setTab] = useState('today'); // today | results
   const [games, setGames] = useState([]);
   const [results, setResults] = useState([]);
@@ -175,6 +175,7 @@ export default function DailyHome({ onNavigateToGame }) {
                   teamNames={TEAM_NAMES}
                   onSelect={() => setSelectedGame(game)}
                   onPredictionSubmit={loadData}
+                  onWatchSim={(away, home) => onWatchSim?.(away, home)}
                 />
               ))}
             </div>
