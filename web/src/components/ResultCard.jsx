@@ -102,6 +102,11 @@ export default function ResultCard({ result, teamNames }) {
           <ScoringPlays plays={result.scoring_plays} />
         )}
 
+        {/* Box score */}
+        {(result.away_batters?.length > 0 || result.home_batters?.length > 0) && (
+          <BoxScore result={result} />
+        )}
+
         {/* Prediction results */}
         <div className="border-t border-slate-700 pt-3 grid grid-cols-2 gap-3">
           {/* Engine */}
@@ -196,6 +201,120 @@ export default function ResultCard({ result, teamNames }) {
         )}
       </div>
     </div>
+  );
+}
+
+function BoxScore({ result }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="bg-slate-900/40 rounded-lg p-2.5 mb-3">
+      <div
+        className="flex items-center justify-between cursor-pointer"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className="text-xs text-slate-400 uppercase tracking-wider">Box Score</span>
+        <span className="text-xs text-slate-500">{expanded ? 'collapse' : 'expand'}</span>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 space-y-4 overflow-x-auto">
+          {/* Away batters */}
+          <div>
+            <div className="text-xs text-slate-400 font-medium mb-1">{result.away_team_id} Batting</div>
+            <BatterTable batters={result.away_batters} />
+          </div>
+
+          {/* Away pitchers */}
+          {result.away_pitchers?.length > 0 && (
+            <div>
+              <div className="text-xs text-slate-400 font-medium mb-1">{result.away_team_id} Pitching</div>
+              <PitcherTable pitchers={result.away_pitchers} />
+            </div>
+          )}
+
+          {/* Home batters */}
+          <div>
+            <div className="text-xs text-slate-400 font-medium mb-1">{result.home_team_id} Batting</div>
+            <BatterTable batters={result.home_batters} />
+          </div>
+
+          {/* Home pitchers */}
+          {result.home_pitchers?.length > 0 && (
+            <div>
+              <div className="text-xs text-slate-400 font-medium mb-1">{result.home_team_id} Pitching</div>
+              <PitcherTable pitchers={result.home_pitchers} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BatterTable({ batters }) {
+  return (
+    <table className="w-full text-xs font-mono">
+      <thead>
+        <tr className="text-slate-500 border-b border-slate-700/50">
+          <th className="text-left py-1 pr-2">Name</th>
+          <th className="text-center px-1">Pos</th>
+          <th className="text-center px-1">AB</th>
+          <th className="text-center px-1">R</th>
+          <th className="text-center px-1">H</th>
+          <th className="text-center px-1">RBI</th>
+          <th className="text-center px-1">BB</th>
+          <th className="text-center px-1">K</th>
+        </tr>
+      </thead>
+      <tbody>
+        {batters.map((b, i) => (
+          <tr key={i} className="border-b border-slate-800/50">
+            <td className="text-left py-0.5 pr-2 text-slate-300 truncate max-w-[120px]">{b.name}</td>
+            <td className="text-center px-1 text-slate-500">{b.pos}</td>
+            <td className="text-center px-1 text-slate-300">{b.ab}</td>
+            <td className={`text-center px-1 ${b.r > 0 ? 'text-amber-400' : 'text-slate-400'}`}>{b.r}</td>
+            <td className={`text-center px-1 ${b.h > 0 ? 'text-white' : 'text-slate-400'}`}>{b.h}</td>
+            <td className={`text-center px-1 ${b.rbi > 0 ? 'text-amber-400' : 'text-slate-400'}`}>{b.rbi}</td>
+            <td className={`text-center px-1 ${b.bb > 0 ? 'text-blue-400' : 'text-slate-400'}`}>{b.bb}</td>
+            <td className={`text-center px-1 ${b.k > 0 ? 'text-red-400' : 'text-slate-400'}`}>{b.k}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function PitcherTable({ pitchers }) {
+  return (
+    <table className="w-full text-xs font-mono">
+      <thead>
+        <tr className="text-slate-500 border-b border-slate-700/50">
+          <th className="text-left py-1 pr-2">Name</th>
+          <th className="text-center px-1">IP</th>
+          <th className="text-center px-1">H</th>
+          <th className="text-center px-1">R</th>
+          <th className="text-center px-1">ER</th>
+          <th className="text-center px-1">BB</th>
+          <th className="text-center px-1">K</th>
+          <th className="text-center px-1">HR</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pitchers.map((p, i) => (
+          <tr key={i} className="border-b border-slate-800/50">
+            <td className="text-left py-0.5 pr-2 text-slate-300 truncate max-w-[120px]">{p.name}</td>
+            <td className="text-center px-1 text-slate-300">{p.ip}</td>
+            <td className={`text-center px-1 ${p.h > 0 ? 'text-white' : 'text-slate-400'}`}>{p.h}</td>
+            <td className={`text-center px-1 ${p.r > 0 ? 'text-amber-400' : 'text-slate-400'}`}>{p.r}</td>
+            <td className={`text-center px-1 ${p.er > 0 ? 'text-amber-400' : 'text-slate-400'}`}>{p.er}</td>
+            <td className={`text-center px-1 ${p.bb > 0 ? 'text-blue-400' : 'text-slate-400'}`}>{p.bb}</td>
+            <td className={`text-center px-1 ${p.k > 0 ? 'text-green-400' : 'text-slate-400'}`}>{p.k}</td>
+            <td className={`text-center px-1 ${p.hr > 0 ? 'text-red-400' : 'text-slate-400'}`}>{p.hr}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

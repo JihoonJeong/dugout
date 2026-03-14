@@ -117,8 +117,12 @@ class ResultCardResponse(BaseModel):
     away_starter_name: str = ""
     home_starter_name: str = ""
 
-    # scoring plays
+    # scoring plays + box score
     scoring_plays: list[dict] = []
+    away_batters: list[dict] = []
+    home_batters: list[dict] = []
+    away_pitchers: list[dict] = []
+    home_pitchers: list[dict] = []
 
     # 엔진 예측
     engine_away_win_pct: float = 0.5
@@ -413,6 +417,10 @@ def get_yesterday_results(manager_id: Optional[str] = Query(None)) -> list[Resul
             away_starter_name=r.away_starter_name,
             home_starter_name=r.home_starter_name,
             scoring_plays=r.scoring_plays,
+            away_batters=r.away_batters,
+            home_batters=r.home_batters,
+            away_pitchers=r.away_pitchers,
+            home_pitchers=r.home_pitchers,
             engine_away_win_pct=engine_away_pct,
             engine_pick=engine_pick,
             user_prediction=asdict(up) if up else None,

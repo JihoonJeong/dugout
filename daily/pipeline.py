@@ -64,7 +64,12 @@ class DailyResult:
 
     # scoring plays
     scoring_plays: list[dict] = field(default_factory=list)
-    # [{"inning": 3, "half": "bottom", "event": "Home Run", "description": "...", "rbi": 2}, ...]
+
+    # box score
+    away_batters: list[dict] = field(default_factory=list)
+    home_batters: list[dict] = field(default_factory=list)
+    away_pitchers: list[dict] = field(default_factory=list)
+    home_pitchers: list[dict] = field(default_factory=list)
 
 
 class DailyDataPipeline:
@@ -249,31 +254,74 @@ class DailyDataPipeline:
                     save_pitcher=sv,
                 ))
 
-        # Scoring plays 추가 (경기당 1회 API 호출)
+        # Scoring plays + box score 추가 (경기당 1회 API 호출)
         for r in results:
             try:
                 game_data = statsapi.get("game", {"gamePk": r.game_id})
-                plays = game_data.get("liveData", {}).get("plays", {})
-                all_plays = plays.get("allPlays", [])
-                scoring_indices = plays.get("scoringPlays", [])
+                live = game_data.get("liveData", {})
 
-                for idx in scoring_indices:
+                # Scoring plays
+                plays = live.get("plays", {})
+                all_plays = plays.get("allPlays", [])
+                for idx in plays.get("scoringPlays", []):
                     if idx >= len(all_plays):
                         continue
                     play = all_plays[idx]
-                    result_data = play.get("result", {})
+                    rd = play.get("result", {})
                     about = play.get("about", {})
                     r.scoring_plays.append({
                         "inning": about.get("inning", 0),
                         "half": about.get("halfInning", ""),
-                        "event": result_data.get("event", ""),
-                        "description": result_data.get("description", ""),
-                        "rbi": result_data.get("rbi", 0),
+                        "event": rd.get("event", ""),
+                        "description": rd.get("description", ""),
+                        "rbi": rd.get("rbi", 0),
                     })
-            except Exception as e:
-                logger.warning("Failed to fetch scoring plays for game %d: %s", r.game_id, e)
 
-        logger.info("Fetched scoring plays for %d results", len(results))
+                # Box score
+                box = live.get("boxscore", {})
+                for side, batters_out, pitchers_out in [
+                    ("away", r.away_batters, r.away_pitchers),
+                    ("home", r.home_batters, r.home_pitchers),
+                ]:
+                    team_box = box.get("teams", {}).get(side, {})
+                    players = team_box.get("players", {})
+
+                    for pid in team_box.get("battingOrder", []):
+                        p = players.get(f"ID{pid}", {})
+                        bs = p.get("stats", {}).get("batting", {})
+                        if not bs:
+                            continue
+                        batters_out.append({
+                            "name": p.get("person", {}).get("fullName", ""),
+                            "pos": p.get("position", {}).get("abbreviation", ""),
+                            "ab": bs.get("atBats", 0),
+                            "r": bs.get("runs", 0),
+                            "h": bs.get("hits", 0),
+                            "rbi": bs.get("rbi", 0),
+                            "bb": bs.get("baseOnBalls", 0),
+                            "k": bs.get("strikeOuts", 0),
+                        })
+
+                    for pid in team_box.get("pitchers", []):
+                        p = players.get(f"ID{pid}", {})
+                        ps = p.get("stats", {}).get("pitching", {})
+                        if not ps:
+                            continue
+                        pitchers_out.append({
+                            "name": p.get("person", {}).get("fullName", ""),
+                            "ip": ps.get("inningsPitched", "0"),
+                            "h": ps.get("hits", 0),
+                            "r": ps.get("runs", 0),
+                            "er": ps.get("earnedRuns", 0),
+                            "bb": ps.get("baseOnBalls", 0),
+                            "k": ps.get("strikeOuts", 0),
+                            "hr": ps.get("homeRuns", 0),
+                        })
+
+            except Exception as e:
+                logger.warning("Failed to fetch game data for %d: %s", r.game_id, e)
+
+        logger.info("Fetched game data for %d results", len(results))
 
         # 캐시 저장
         with open(cache_path, "w") as f:
