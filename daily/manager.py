@@ -1,4 +1,4 @@
-"""감독(매니저) 관리 — JSON 파일 기반."""
+"""감독(매니저) 관리 — Upstash Redis (우선) / JSON 파일 폴백."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+from .redis_client import UpstashRedis, is_redis_available
+
 logger = logging.getLogger(__name__)
+
+_REDIS_KEY = "managers"
 
 
 @dataclass
@@ -19,19 +23,34 @@ class Manager:
 
 
 class ManagerStore:
-    """JSON 파일 기반 매니저 저장소."""
+    """매니저 저장소 — Redis 우선, JSON 폴백."""
 
     def __init__(self, store_path: str = "data/managers.json"):
         self._path = Path(store_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._redis: UpstashRedis | None = None
+        if is_redis_available():
+            try:
+                self._redis = UpstashRedis()
+                logger.info("ManagerStore: using Upstash Redis")
+            except Exception as e:
+                logger.warning("Redis init failed, falling back to JSON: %s", e)
+        else:
+            logger.info("ManagerStore: using JSON file storage")
 
     def _load(self) -> list[dict]:
+        if self._redis:
+            data = self._redis.get_json(_REDIS_KEY)
+            return data if data else []
         if not self._path.exists():
             return []
         with open(self._path) as f:
             return json.load(f)
 
     def _save(self, managers: list[dict]) -> None:
+        if self._redis:
+            self._redis.set_json(_REDIS_KEY, managers)
+            return
         with open(self._path, "w") as f:
             json.dump(managers, f, indent=2)
 

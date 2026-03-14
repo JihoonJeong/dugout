@@ -1,4 +1,4 @@
-"""예측 저장소 — JSON 파일 기반 영속화 + 채점."""
+"""예측 저장소 — Upstash Redis (우선) / JSON 파일 폴백 + 채점."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from .redis_client import UpstashRedis, is_redis_available
 from .scoring import ScoreBreakdown, CumulativeStats, calculate_prediction_score
 
 logger = logging.getLogger(__name__)
@@ -48,16 +49,31 @@ class UserPrediction:
 
 
 class PredictionStore:
-    """JSON 파일 기반 예측 저장소."""
+    """예측 저장소 — Redis 우선, JSON 폴백."""
 
     def __init__(self, store_dir: str = "data/predictions/"):
         self._store_dir = Path(store_dir)
         self._store_dir.mkdir(parents=True, exist_ok=True)
+        self._redis: UpstashRedis | None = None
+        if is_redis_available():
+            try:
+                self._redis = UpstashRedis()
+                logger.info("PredictionStore: using Upstash Redis")
+            except Exception as e:
+                logger.warning("Redis init failed, falling back to JSON: %s", e)
+        else:
+            logger.info("PredictionStore: using JSON file storage")
+
+    def _redis_key(self, game_date: str) -> str:
+        return f"pred:{game_date}"
 
     def _date_path(self, game_date: str) -> Path:
         return self._store_dir / f"{game_date}.json"
 
     def _load_date(self, game_date: str) -> list[dict]:
+        if self._redis:
+            data = self._redis.get_json(self._redis_key(game_date))
+            return data if data else []
         path = self._date_path(game_date)
         if not path.exists():
             return []
@@ -65,9 +81,19 @@ class PredictionStore:
             return json.load(f)
 
     def _save_date(self, game_date: str, predictions: list[dict]) -> None:
+        if self._redis:
+            self._redis.set_json(self._redis_key(game_date), predictions)
+            return
         path = self._date_path(game_date)
         with open(path, "w") as f:
             json.dump(predictions, f, indent=2)
+
+    def _all_date_keys(self) -> list[str]:
+        """모든 날짜 키 목록."""
+        if self._redis:
+            keys = self._redis.keys("pred:*")
+            return [k.replace("pred:", "") for k in keys]
+        return [p.stem for p in self._store_dir.glob("*.json") if p.name != "stats.json"]
 
     def submit(
         self,
@@ -216,10 +242,8 @@ class PredictionStore:
         """
         stats = CumulativeStats()
 
-        for path in sorted(self._store_dir.glob("*.json")):
-            if path.name == "stats.json":
-                continue
-            predictions = self._load_date(path.stem)
+        for date_key in sorted(self._all_date_keys()):
+            predictions = self._load_date(date_key)
             for p in predictions:
                 # 스프링 트레이닝은 누적 성적에서 제외
                 if p.get("game_type", "R") == "S":
