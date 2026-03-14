@@ -515,8 +515,9 @@ def get_leaderboard() -> list[dict]:
 
 def _is_locked(game: DailyGame) -> bool:
     """경기 시작 1시간 전이면 마감."""
-    if game.status != "Scheduled":
-        return True  # 이미 시작된 경기는 마감
+    # 이미 진행중이거나 종료된 경기는 마감
+    if game.status in ("In Progress", "Final", "Game Over", "Completed Early"):
+        return True
 
     if not game.game_datetime_utc:
         return False
