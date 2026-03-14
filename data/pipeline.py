@@ -53,12 +53,15 @@ class DugoutDataPipeline:
     def load_all(self, force_refresh: bool = False) -> DugoutData:
         """전체 데이터를 로드하여 엔진에 공급 가능한 형태로 반환."""
 
-        # 엔진 캐시 확인
+        # 엔진 캐시 확인 (캐시 → 번들 순)
         engine_cache = Path(self.cache_dir) / "engine" / f"dugout_data_{self.season}.pkl"
-        if not force_refresh and engine_cache.exists():
-            logger.info("Loading cached engine data: %s", engine_cache)
-            with open(engine_cache, "rb") as f:
-                return pickle.load(f)
+        bundled = Path(__file__).parent / f"dugout_data_{self.season}.pkl"
+
+        for data_path in [engine_cache, bundled]:
+            if not force_refresh and data_path.exists():
+                logger.info("Loading cached engine data: %s", data_path)
+                with open(data_path, "rb") as f:
+                    return pickle.load(f)
 
         # 1. Raw 데이터 추출
         raw_batting = fetch_batting_stats(self.season, self.cache_dir, force=force_refresh)

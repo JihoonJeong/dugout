@@ -8,8 +8,12 @@ __pycache__/
 
 # Cache & data
 cache/
-*.pkl
 data/predictions/
+
+# Pkl files (except bundled engine data)
+*.pkl
+!data/dugout_data_*.pkl
+!data/id_mapping.parquet
 
 # OS
 .DS_Store

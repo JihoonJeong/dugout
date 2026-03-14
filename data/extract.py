@@ -119,10 +119,15 @@ def fetch_id_mapping(cache_dir: str | None = None, force: bool = False) -> pd.Da
         DataFrame with columns: key_fangraphs, key_mlbam, name_first, name_last
     """
     cache_path = _cache_path(cache_dir, "id_mapping.parquet")
+    bundled_path = Path(__file__).parent / "id_mapping.parquet"
 
     if not force and cache_path and cache_path.exists():
         logger.info("Loading cached ID mapping: %s", cache_path)
         return pd.read_parquet(cache_path)
+
+    if not force and bundled_path.exists():
+        logger.info("Loading bundled ID mapping: %s", bundled_path)
+        return pd.read_parquet(bundled_path)
 
     from pybaseball import chadwick_register
 
