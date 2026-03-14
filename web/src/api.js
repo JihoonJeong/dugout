@@ -91,6 +91,13 @@ export async function getDailyGames(date = 'today') {
   return res.json();
 }
 
+export async function predictGame(gameId, gameDate) {
+  const res = await fetch(`${BASE}/daily/games/${gameId}/predict?game_date=${gameDate}`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 export async function submitPrediction({ gameId, gameDate, predictedWinner, predictedAwayScore, predictedHomeScore, confidence }) {
   const res = await fetch(`${BASE}/daily/predictions`, {
     method: 'POST',

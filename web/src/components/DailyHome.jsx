@@ -148,8 +148,7 @@ export default function DailyHome({ onNavigateToGame }) {
 
         {loading ? (
           <div className="text-center py-12 text-slate-400">
-            <div className="text-lg mb-2">Loading predictions...</div>
-            <div className="text-sm">Running Monte Carlo simulations — first load may take a moment</div>
+            <div className="text-lg mb-2">Loading schedule...</div>
           </div>
         ) : tab === 'today' ? (
           games.length === 0 ? (

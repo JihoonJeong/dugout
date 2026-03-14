@@ -67,6 +67,9 @@ class GameCardResponse(BaseModel):
     away_starter_fallback: Optional[str] = None
     home_starter_fallback: Optional[str] = None
 
+    # 엔진 예측 유무
+    has_prediction: bool = False
+
     # 사용자 예측 (있으면)
     user_prediction: Optional[dict] = None
 
@@ -132,8 +135,8 @@ class MyStatsResponse(BaseModel):
 
 @router.get("/games/today")
 def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardResponse]:
-    """오늘 경기 목록 + 엔진 예측."""
-    if _pipeline is None or _predictor is None or _store is None:
+    """오늘 경기 스케줄 (시뮬레이션 없이 빠르게 반환)."""
+    if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
     today_str = date.today().isoformat()
@@ -142,58 +145,23 @@ def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardRes
     if not games:
         return []
 
-    # 예측 캐시 확인
-    if today_str not in _prediction_cache:
-        predictions = _predictor.predict_all(games, n_sims=200)
-        _prediction_cache[today_str] = predictions
-    else:
-        predictions = _prediction_cache[today_str]
+    # 캐시된 예측이 있으면 포함, 없으면 예측 없이 반환
+    pred_map = {}
+    if today_str in _prediction_cache:
+        pred_map = {p.game_id: p for p in _prediction_cache[today_str]}
 
-    pred_map = {p.game_id: p for p in predictions}
     all_user_preds = _store.get_by_date(today_str)
     if manager_id is not None:
         all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
     user_preds = {p.game_id: p for p in all_user_preds}
 
-    result = []
-    for game in games:
-        pred = pred_map.get(game.game_id)
-        up = user_preds.get(game.game_id)
-
-        card = GameCardResponse(
-            game_id=game.game_id,
-            game_date=game.game_date,
-            game_time=game.game_time,
-            away_team_id=game.away_team_id,
-            home_team_id=game.home_team_id,
-            away_starter_name=game.away_starter_name,
-            home_starter_name=game.home_starter_name,
-            venue=game.venue,
-            status=game.status,
-            game_type=game.game_type,
-            mc_away_win_pct=pred.mc_away_win_pct if pred else 0.5,
-            mc_home_win_pct=pred.mc_home_win_pct if pred else 0.5,
-            final_away_win_pct=pred.final_away_win_pct if pred else 0.5,
-            final_home_win_pct=pred.final_home_win_pct if pred else 0.5,
-            mc_avg_away_runs=pred.mc_avg_away_runs if pred else 0.0,
-            mc_avg_home_runs=pred.mc_avg_home_runs if pred else 0.0,
-            mc_avg_total_runs=pred.mc_avg_total_runs if pred else 0.0,
-            quick_away_score=pred.quick_away_score if pred else 0,
-            quick_home_score=pred.quick_home_score if pred else 0,
-            matchup_summary=pred.matchup_summary if pred else "",
-            away_starter_fallback=pred.away_starter_fallback if pred else None,
-            home_starter_fallback=pred.home_starter_fallback if pred else None,
-            user_prediction=asdict(up) if up else None,
-        )
-        result.append(card)
-
-    return result
+    return [_build_game_card(game, pred_map.get(game.game_id), user_preds.get(game.game_id)) for game in games]
 
 
 @router.get("/games/{target_date}")
-def get_games_by_date(target_date: str) -> list[GameCardResponse]:
-    """특정 날짜 경기 목록 + 엔진 예측."""
-    if _pipeline is None or _predictor is None or _store is None:
+def get_games_by_date(target_date: str, manager_id: Optional[str] = Query(None)) -> list[GameCardResponse]:
+    """특정 날짜 경기 스케줄."""
+    if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
     try:
@@ -205,47 +173,81 @@ def get_games_by_date(target_date: str) -> list[GameCardResponse]:
     if not games:
         return []
 
-    if target_date not in _prediction_cache:
-        predictions = _predictor.predict_all(games, n_sims=200)
-        _prediction_cache[target_date] = predictions
-    else:
-        predictions = _prediction_cache[target_date]
+    pred_map = {}
+    if target_date in _prediction_cache:
+        pred_map = {p.game_id: p for p in _prediction_cache[target_date]}
 
-    pred_map = {p.game_id: p for p in predictions}
-    user_preds = {p.game_id: p for p in _store.get_by_date(target_date)}
+    all_user_preds = _store.get_by_date(target_date)
+    if manager_id is not None:
+        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
+    user_preds = {p.game_id: p for p in all_user_preds}
 
-    result = []
-    for game in games:
-        pred = pred_map.get(game.game_id)
-        up = user_preds.get(game.game_id)
-        card = GameCardResponse(
-            game_id=game.game_id,
-            game_date=game.game_date,
-            game_time=game.game_time,
-            away_team_id=game.away_team_id,
-            home_team_id=game.home_team_id,
-            away_starter_name=game.away_starter_name,
-            home_starter_name=game.home_starter_name,
-            venue=game.venue,
-            status=game.status,
-            game_type=game.game_type,
-            mc_away_win_pct=pred.mc_away_win_pct if pred else 0.5,
-            mc_home_win_pct=pred.mc_home_win_pct if pred else 0.5,
-            final_away_win_pct=pred.final_away_win_pct if pred else 0.5,
-            final_home_win_pct=pred.final_home_win_pct if pred else 0.5,
-            mc_avg_away_runs=pred.mc_avg_away_runs if pred else 0.0,
-            mc_avg_home_runs=pred.mc_avg_home_runs if pred else 0.0,
-            mc_avg_total_runs=pred.mc_avg_total_runs if pred else 0.0,
-            quick_away_score=pred.quick_away_score if pred else 0,
-            quick_home_score=pred.quick_home_score if pred else 0,
-            matchup_summary=pred.matchup_summary if pred else "",
-            away_starter_fallback=pred.away_starter_fallback if pred else None,
-            home_starter_fallback=pred.home_starter_fallback if pred else None,
-            user_prediction=asdict(up) if up else None,
-        )
-        result.append(card)
+    return [_build_game_card(game, pred_map.get(game.game_id), user_preds.get(game.game_id)) for game in games]
 
-    return result
+
+@router.post("/games/{game_id}/predict")
+def predict_single_game(game_id: int, game_date: str = Query(...)) -> GameCardResponse:
+    """단일 경기 엔진 예측 (on-demand)."""
+    if _pipeline is None or _predictor is None:
+        raise HTTPException(500, "Daily module not initialized")
+
+    try:
+        dt = date.fromisoformat(game_date)
+    except ValueError:
+        raise HTTPException(400, "Invalid date format")
+
+    games = _pipeline.fetch_games(dt)
+    game = next((g for g in games if g.game_id == game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Game {game_id} not found on {game_date}")
+
+    # 캐시 확인
+    if game_date in _prediction_cache:
+        cached = {p.game_id: p for p in _prediction_cache[game_date]}
+        if game_id in cached:
+            return _build_game_card(game, cached[game_id], None)
+
+    # 단일 경기 시뮬레이션
+    pred = _predictor.predict_game(game, n_sims=200)
+
+    # 캐시에 추가
+    if game_date not in _prediction_cache:
+        _prediction_cache[game_date] = []
+    # 기존 캐시에서 같은 game_id 제거 후 추가
+    _prediction_cache[game_date] = [p for p in _prediction_cache[game_date] if p.game_id != game_id]
+    _prediction_cache[game_date].append(pred)
+
+    return _build_game_card(game, pred, None)
+
+
+def _build_game_card(game: DailyGame, pred, up) -> GameCardResponse:
+    """DailyGame + prediction + user prediction → GameCardResponse."""
+    return GameCardResponse(
+        game_id=game.game_id,
+        game_date=game.game_date,
+        game_time=game.game_time,
+        away_team_id=game.away_team_id,
+        home_team_id=game.home_team_id,
+        away_starter_name=game.away_starter_name,
+        home_starter_name=game.home_starter_name,
+        venue=game.venue,
+        status=game.status,
+        game_type=game.game_type,
+        mc_away_win_pct=pred.mc_away_win_pct if pred else 0.5,
+        mc_home_win_pct=pred.mc_home_win_pct if pred else 0.5,
+        final_away_win_pct=pred.final_away_win_pct if pred else 0.5,
+        final_home_win_pct=pred.final_home_win_pct if pred else 0.5,
+        mc_avg_away_runs=pred.mc_avg_away_runs if pred else 0.0,
+        mc_avg_home_runs=pred.mc_avg_home_runs if pred else 0.0,
+        mc_avg_total_runs=pred.mc_avg_total_runs if pred else 0.0,
+        quick_away_score=pred.quick_away_score if pred else 0,
+        quick_home_score=pred.quick_home_score if pred else 0,
+        matchup_summary=pred.matchup_summary if pred else "",
+        away_starter_fallback=pred.away_starter_fallback if pred else None,
+        home_starter_fallback=pred.home_starter_fallback if pred else None,
+        user_prediction=asdict(up) if up else None,
+        has_prediction=pred is not None,
+    )
 
 
 @router.post("/predictions")
