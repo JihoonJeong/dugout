@@ -41,7 +41,8 @@ def init_daily(data: DugoutData) -> None:
 # ── Pydantic Models ──────────────────────────────────────
 
 class GameCardResponse(BaseModel):
-    game_id: int
+    game_id: int | str
+    league_id: str = "mlb"
     game_date: str
     game_time: str
     game_datetime_utc: str = ""  # ISO 8601 UTC
@@ -94,7 +95,8 @@ class PredictionUpdateRequest(BaseModel):
 
 
 class ResultCardResponse(BaseModel):
-    game_id: int
+    game_id: int | str
+    league_id: str = "mlb"
     game_date: str
     away_team_id: str
     home_team_id: str
@@ -248,6 +250,7 @@ def _build_game_card(game: DailyGame, pred, up) -> GameCardResponse:
     """DailyGame + prediction + user prediction → GameCardResponse."""
     return GameCardResponse(
         game_id=game.game_id,
+        league_id=getattr(game, "league_id", "mlb"),
         game_date=game.game_date,
         game_time=game.game_time,
         game_datetime_utc=game.game_datetime_utc,
@@ -400,6 +403,7 @@ def get_yesterday_results(manager_id: Optional[str] = Query(None)) -> list[Resul
 
         response.append(ResultCardResponse(
             game_id=r.game_id,
+            league_id=getattr(r, "league_id", "mlb"),
             game_date=r.game_date,
             away_team_id=r.away_team_id,
             home_team_id=r.home_team_id,

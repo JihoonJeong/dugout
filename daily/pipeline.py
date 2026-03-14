@@ -1,80 +1,32 @@
-"""DailyDataPipeline — 오늘 경기 + 어제 결과 수집."""
+"""DailyDataPipeline — MLB 일일 경기 데이터 수집.
+
+하위 호환성을 위해 기존 인터페이스를 유지합니다.
+DailyGame, DailyResult는 daily.pipelines.base에서 re-export.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
-from data.constants import MLB_TEAM_IDS
+from data.leagues.mlb.teams import TEAM_IDS as MLB_TEAM_IDS
+from daily.pipelines.base import DailyGame, DailyResult
 
 logger = logging.getLogger(__name__)
+
+# re-export for backward compatibility
+__all__ = ["DailyGame", "DailyResult", "DailyDataPipeline"]
 
 _MLB_ID_TO_ABBR = {v: k for k, v in MLB_TEAM_IDS.items()}
 
 
-@dataclass
-class DailyGame:
-    """오늘의 경기 정보."""
-    game_id: int
-    game_date: str  # "2026-03-25"
-    game_time: str  # "19:10" (ET)
-    away_team_id: str
-    home_team_id: str
-    away_starter_mlb_id: Optional[int] = None
-    away_starter_name: str = "TBD"
-    home_starter_mlb_id: Optional[int] = None
-    home_starter_name: str = "TBD"
-    status: str = "Scheduled"  # Scheduled, In Progress, Final
-    away_score: Optional[int] = None
-    home_score: Optional[int] = None
-    venue: str = ""
-    game_type: str = "R"  # "R" = Regular, "S" = Spring Training
-    game_datetime_utc: str = ""  # ISO 8601 UTC (e.g. "2026-03-15T23:10:00Z")
-
-
-@dataclass
-class DailyResult:
-    """어제의 경기 결과."""
-    game_id: int
-    game_date: str
-    away_team_id: str
-    home_team_id: str
-    away_score: int
-    home_score: int
-    winner: str  # "away" | "home"
-    away_starter_name: str = ""
-    home_starter_name: str = ""
-    game_type: str = "R"
-
-    # linescore: 이닝별 점수
-    away_innings: list[int] = field(default_factory=list)  # [0, 1, 0, 3, ...]
-    home_innings: list[int] = field(default_factory=list)
-    away_hits: int = 0
-    home_hits: int = 0
-    away_errors: int = 0
-    home_errors: int = 0
-
-    # decisions: 승/패/세이브 투수
-    winning_pitcher: str = ""
-    losing_pitcher: str = ""
-    save_pitcher: str = ""
-
-    # scoring plays
-    scoring_plays: list[dict] = field(default_factory=list)
-
-    # box score
-    away_batters: list[dict] = field(default_factory=list)
-    home_batters: list[dict] = field(default_factory=list)
-    away_pitchers: list[dict] = field(default_factory=list)
-    home_pitchers: list[dict] = field(default_factory=list)
-
-
 class DailyDataPipeline:
     """MLB Stats API에서 일일 경기 데이터를 수집."""
+
+    league_id = "mlb"
 
     def __init__(self, cache_dir: str = "cache/daily/"):
         self._cache_dir = Path(cache_dir)
@@ -86,18 +38,18 @@ class DailyDataPipeline:
             target_date = date.today()
 
         date_str = target_date.isoformat()
-        cache_path = self._cache_dir / f"games_{date_str}.json"
+        cache_path = self._cache_dir / f"mlb_games_{date_str}.json"
 
         # 캐시 확인 (당일이면 캐시 무효화 — 선발 변경 가능)
         if cache_path.exists() and target_date != date.today():
-            logger.info("Loading cached games: %s", cache_path)
+            logger.info("Loading cached MLB games: %s", cache_path)
             with open(cache_path) as f:
                 raw = json.load(f)
             return [DailyGame(**g) for g in raw]
 
         import statsapi
 
-        logger.info("Fetching games for %s from MLB Stats API...", date_str)
+        logger.info("Fetching MLB games for %s...", date_str)
 
         sched = statsapi.get("schedule", {
             "sportId": 1,
@@ -132,7 +84,6 @@ class DailyDataPipeline:
                 if game_datetime:
                     try:
                         dt = datetime.fromisoformat(game_datetime.replace("Z", "+00:00"))
-                        # UTC → ET (대략 -4h in summer)
                         et = dt - timedelta(hours=4)
                         game_time = et.strftime("%H:%M")
                     except (ValueError, TypeError):
@@ -142,6 +93,7 @@ class DailyDataPipeline:
 
                 games.append(DailyGame(
                     game_id=g["gamePk"],
+                    league_id="mlb",
                     game_date=g.get("officialDate", date_str),
                     game_time=game_time,
                     away_team_id=away_abbr,
@@ -158,7 +110,7 @@ class DailyDataPipeline:
                     game_datetime_utc=game_datetime,
                 ))
 
-        logger.info("Found %d games for %s", len(games), date_str)
+        logger.info("Found %d MLB games for %s", len(games), date_str)
 
         # 캐시 저장
         with open(cache_path, "w") as f:
@@ -167,18 +119,16 @@ class DailyDataPipeline:
         return games
 
     def fetch_today(self) -> list[DailyGame]:
-        """오늘 경기 목록."""
         return self.fetch_games(date.today())
 
     def fetch_yesterday_results(self) -> list[DailyResult]:
         """어제 경기 결과 (linescore + decisions 포함)."""
         yesterday = date.today() - timedelta(days=1)
         date_str = yesterday.isoformat()
-        cache_path = self._cache_dir / f"results_{date_str}.json"
+        cache_path = self._cache_dir / f"mlb_results_{date_str}.json"
 
-        # 결과 캐시 확인
         if cache_path.exists():
-            logger.info("Loading cached results: %s", cache_path)
+            logger.info("Loading cached MLB results: %s", cache_path)
             with open(cache_path) as f:
                 raw = json.load(f)
             return [DailyResult(**r) for r in raw]
@@ -215,7 +165,6 @@ class DailyDataPipeline:
                 home_score = home_info.get("score", 0)
                 winner = "away" if away_score > home_score else "home"
 
-                # Linescore
                 linescore = g.get("linescore", {})
                 innings = linescore.get("innings", [])
                 away_innings = [inn.get("away", {}).get("runs", 0) for inn in innings]
@@ -224,18 +173,17 @@ class DailyDataPipeline:
                 away_totals = linescore.get("teams", {}).get("away", {})
                 home_totals = linescore.get("teams", {}).get("home", {})
 
-                # Decisions
                 decisions = g.get("decisions", {})
                 wp = decisions.get("winner", {}).get("fullName", "")
                 lp = decisions.get("loser", {}).get("fullName", "")
                 sv = decisions.get("save", {}).get("fullName", "")
 
-                # Probable pitchers
                 away_pp = away_info.get("probablePitcher", {})
                 home_pp = home_info.get("probablePitcher", {})
 
                 results.append(DailyResult(
                     game_id=g["gamePk"],
+                    league_id="mlb",
                     game_date=g.get("officialDate", date_str),
                     away_team_id=away_abbr,
                     home_team_id=home_abbr,
@@ -256,13 +204,12 @@ class DailyDataPipeline:
                     save_pitcher=sv,
                 ))
 
-        # Scoring plays + box score 추가 (경기당 1회 API 호출)
+        # Scoring plays + box score
         for r in results:
             try:
                 game_data = statsapi.get("game", {"gamePk": r.game_id})
                 live = game_data.get("liveData", {})
 
-                # Scoring plays
                 plays = live.get("plays", {})
                 all_plays = plays.get("allPlays", [])
                 for idx in plays.get("scoringPlays", []):
@@ -279,7 +226,6 @@ class DailyDataPipeline:
                         "rbi": rd.get("rbi", 0),
                     })
 
-                # Box score
                 box = live.get("boxscore", {})
                 for side, batters_out, pitchers_out in [
                     ("away", r.away_batters, r.away_pitchers),
@@ -321,11 +267,10 @@ class DailyDataPipeline:
                         })
 
             except Exception as e:
-                logger.warning("Failed to fetch game data for %d: %s", r.game_id, e)
+                logger.warning("Failed to fetch game data for %s: %s", r.game_id, e)
 
-        logger.info("Fetched game data for %d results", len(results))
+        logger.info("Fetched game data for %d MLB results", len(results))
 
-        # 캐시 저장
         with open(cache_path, "w") as f:
             json.dump([asdict(r) for r in results], f, indent=2)
 
@@ -336,10 +281,10 @@ class DailyDataPipeline:
         start_date: date,
         end_date: date,
     ) -> dict[str, list[DailyGame]]:
-        """날짜 범위의 전체 일정 수집 (2026 시즌 캐싱용)."""
+        """날짜 범위의 전체 일정 수집."""
         import statsapi
 
-        cache_path = self._cache_dir / f"schedule_{start_date.year}.json"
+        cache_path = self._cache_dir / f"mlb_schedule_{start_date.year}.json"
         if cache_path.exists():
             logger.info("Loading cached schedule: %s", cache_path)
             with open(cache_path) as f:
@@ -349,7 +294,7 @@ class DailyDataPipeline:
                 result[d] = [DailyGame(**g) for g in games]
             return result
 
-        logger.info("Fetching schedule %s to %s...", start_date, end_date)
+        logger.info("Fetching MLB schedule %s to %s...", start_date, end_date)
 
         sched = statsapi.get("schedule", {
             "sportId": 1,
@@ -385,6 +330,7 @@ class DailyDataPipeline:
 
                 day_games.append(DailyGame(
                     game_id=g["gamePk"],
+                    league_id="mlb",
                     game_date=d,
                     game_time=game_time,
                     away_team_id=away_abbr,
@@ -397,14 +343,12 @@ class DailyDataPipeline:
             if day_games:
                 by_date[d] = day_games
 
-        logger.info("Fetched %d dates with games", len(by_date))
+        logger.info("Fetched %d dates with MLB games", len(by_date))
 
-        # 캐시 저장
         serializable = {}
         for d, games in by_date.items():
             serializable[d] = [asdict(g) for g in games]
         with open(cache_path, "w") as f:
             json.dump(serializable, f, indent=2)
-        logger.info("Cached schedule to %s", cache_path)
 
         return by_date
