@@ -47,6 +47,20 @@ class DailyResult:
     winner: str  # "away" | "home"
     away_starter_name: str = ""
     home_starter_name: str = ""
+    game_type: str = "R"
+
+    # linescore: 이닝별 점수
+    away_innings: list[int] = field(default_factory=list)  # [0, 1, 0, 3, ...]
+    home_innings: list[int] = field(default_factory=list)
+    away_hits: int = 0
+    home_hits: int = 0
+    away_errors: int = 0
+    home_errors: int = 0
+
+    # decisions: 승/패/세이브 투수
+    winning_pitcher: str = ""
+    losing_pitcher: str = ""
+    save_pitcher: str = ""
 
 
 class DailyDataPipeline:
@@ -78,7 +92,7 @@ class DailyDataPipeline:
         sched = statsapi.get("schedule", {
             "sportId": 1,
             "date": date_str,
-            "hydrate": "probablePitcher",
+            "hydrate": "probablePitcher,linescore,decisions",
         })
 
         games: list[DailyGame] = []
@@ -146,29 +160,94 @@ class DailyDataPipeline:
         return self.fetch_games(date.today())
 
     def fetch_yesterday_results(self) -> list[DailyResult]:
-        """어제 경기 결과."""
+        """어제 경기 결과 (linescore + decisions 포함)."""
         yesterday = date.today() - timedelta(days=1)
-        games = self.fetch_games(yesterday)
+        date_str = yesterday.isoformat()
+        cache_path = self._cache_dir / f"results_{date_str}.json"
+
+        # 결과 캐시 확인
+        if cache_path.exists():
+            logger.info("Loading cached results: %s", cache_path)
+            with open(cache_path) as f:
+                raw = json.load(f)
+            return [DailyResult(**r) for r in raw]
+
+        import statsapi
+
+        sched = statsapi.get("schedule", {
+            "sportId": 1,
+            "date": date_str,
+            "hydrate": "probablePitcher,linescore,decisions",
+        })
 
         results: list[DailyResult] = []
-        for g in games:
-            if g.status not in ("Final", "Completed Early", "Game Over"):
-                continue
-            if g.away_score is None or g.home_score is None:
-                continue
+        for date_entry in sched.get("dates", []):
+            for g in date_entry.get("games", []):
+                game_type = g.get("gameType", "")
+                if game_type not in ("R", "S"):
+                    continue
 
-            winner = "away" if g.away_score > g.home_score else "home"
-            results.append(DailyResult(
-                game_id=g.game_id,
-                game_date=g.game_date,
-                away_team_id=g.away_team_id,
-                home_team_id=g.home_team_id,
-                away_score=g.away_score,
-                home_score=g.home_score,
-                winner=winner,
-                away_starter_name=g.away_starter_name,
-                home_starter_name=g.home_starter_name,
-            ))
+                status = g.get("status", {}).get("detailedState", "")
+                if status not in ("Final", "Completed Early", "Game Over"):
+                    continue
+
+                teams = g.get("teams", {})
+                away_info = teams.get("away", {})
+                home_info = teams.get("home", {})
+
+                away_abbr = _MLB_ID_TO_ABBR.get(away_info.get("team", {}).get("id"))
+                home_abbr = _MLB_ID_TO_ABBR.get(home_info.get("team", {}).get("id"))
+                if away_abbr is None or home_abbr is None:
+                    continue
+
+                away_score = away_info.get("score", 0)
+                home_score = home_info.get("score", 0)
+                winner = "away" if away_score > home_score else "home"
+
+                # Linescore
+                linescore = g.get("linescore", {})
+                innings = linescore.get("innings", [])
+                away_innings = [inn.get("away", {}).get("runs", 0) for inn in innings]
+                home_innings = [inn.get("home", {}).get("runs", 0) for inn in innings]
+
+                away_totals = linescore.get("teams", {}).get("away", {})
+                home_totals = linescore.get("teams", {}).get("home", {})
+
+                # Decisions
+                decisions = g.get("decisions", {})
+                wp = decisions.get("winner", {}).get("fullName", "")
+                lp = decisions.get("loser", {}).get("fullName", "")
+                sv = decisions.get("save", {}).get("fullName", "")
+
+                # Probable pitchers
+                away_pp = away_info.get("probablePitcher", {})
+                home_pp = home_info.get("probablePitcher", {})
+
+                results.append(DailyResult(
+                    game_id=g["gamePk"],
+                    game_date=g.get("officialDate", date_str),
+                    away_team_id=away_abbr,
+                    home_team_id=home_abbr,
+                    away_score=away_score,
+                    home_score=home_score,
+                    winner=winner,
+                    away_starter_name=away_pp.get("fullName", ""),
+                    home_starter_name=home_pp.get("fullName", ""),
+                    game_type=game_type,
+                    away_innings=away_innings,
+                    home_innings=home_innings,
+                    away_hits=away_totals.get("hits", 0),
+                    home_hits=home_totals.get("hits", 0),
+                    away_errors=away_totals.get("errors", 0),
+                    home_errors=home_totals.get("errors", 0),
+                    winning_pitcher=wp,
+                    losing_pitcher=lp,
+                    save_pitcher=sv,
+                ))
+
+        # 캐시 저장
+        with open(cache_path, "w") as f:
+            json.dump([asdict(r) for r in results], f, indent=2)
 
         return results
 
