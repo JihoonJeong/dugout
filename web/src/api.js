@@ -1,4 +1,4 @@
-const BASE = '';
+const BASE = import.meta.env.VITE_API_URL || '';
 
 export async function createGame({ awayTeamId, homeTeamId, mode, awayPhilosophy, homePhilosophy, seed }) {
   const res = await fetch(`${BASE}/game/new`, {
