@@ -33,6 +33,7 @@ class DailyGame:
     home_score: Optional[int] = None
     venue: str = ""
     game_type: str = "R"  # "R" = Regular, "S" = Spring Training
+    game_datetime_utc: str = ""  # ISO 8601 UTC (e.g. "2026-03-15T23:10:00Z")
 
 
 @dataclass
@@ -154,6 +155,7 @@ class DailyDataPipeline:
                     home_score=home_info.get("score"),
                     venue=venue,
                     game_type=game_type,
+                    game_datetime_utc=game_datetime,
                 ))
 
         logger.info("Found %d games for %s", len(games), date_str)
@@ -390,6 +392,7 @@ class DailyDataPipeline:
                     venue=g.get("venue", {}).get("name", ""),
                     status=g.get("status", {}).get("detailedState", "Scheduled"),
                     game_type=game_type,
+                    game_datetime_utc=game_datetime,
                 ))
             if day_games:
                 by_date[d] = day_games

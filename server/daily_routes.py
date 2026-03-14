@@ -44,6 +44,7 @@ class GameCardResponse(BaseModel):
     game_id: int
     game_date: str
     game_time: str
+    game_datetime_utc: str = ""  # ISO 8601 UTC
     away_team_id: str
     home_team_id: str
     away_starter_name: str
@@ -249,6 +250,7 @@ def _build_game_card(game: DailyGame, pred, up) -> GameCardResponse:
         game_id=game.game_id,
         game_date=game.game_date,
         game_time=game.game_time,
+        game_datetime_utc=game.game_datetime_utc,
         away_team_id=game.away_team_id,
         home_team_id=game.home_team_id,
         away_starter_name=game.away_starter_name,
@@ -513,12 +515,16 @@ def get_leaderboard() -> list[dict]:
 
 def _is_locked(game: DailyGame) -> bool:
     """경기 시작 1시간 전이면 마감."""
-    if not game.game_time or game.status != "Scheduled":
-        return game.status != "Scheduled"  # 이미 시작된 경기는 마감
+    if game.status != "Scheduled":
+        return True  # 이미 시작된 경기는 마감
+
+    if not game.game_datetime_utc:
+        return False
 
     try:
-        game_dt = datetime.fromisoformat(f"{game.game_date}T{game.game_time}")
-        now = datetime.now()
+        game_dt = datetime.fromisoformat(game.game_datetime_utc.replace("Z", "+00:00"))
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         return now >= game_dt - timedelta(hours=1)
     except (ValueError, TypeError):
         return False

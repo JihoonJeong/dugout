@@ -2,17 +2,16 @@ import { useState, useEffect } from 'react';
 import { submitPrediction, predictGame } from '../api';
 import AIAnalysis from './AIAnalysis';
 
-function useCountdown(gameDate, gameTime) {
+function useCountdown(gameDatetimeUtc) {
   const [timeLeft, setTimeLeft] = useState('');
   const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
-    if (!gameTime || !gameDate) return;
+    if (!gameDatetimeUtc) return;
 
     function update() {
       try {
-        const gameStr = `${gameDate}T${gameTime}:00`;
-        const gameMs = new Date(gameStr).getTime();
+        const gameMs = new Date(gameDatetimeUtc).getTime();
         const lockMs = gameMs - 60 * 60 * 1000;
         const now = Date.now();
 
@@ -34,7 +33,7 @@ function useCountdown(gameDate, gameTime) {
     update();
     const t = setInterval(update, 60000);
     return () => clearInterval(t);
-  }, [gameDate, gameTime]);
+  }, [gameDatetimeUtc]);
 
   return { timeLeft, isLocked };
 }
@@ -48,7 +47,7 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [predicting, setPredicting] = useState(false);
-  const { timeLeft, isLocked } = useCountdown(game.game_date, game.game_time);
+  const { timeLeft, isLocked } = useCountdown(game.game_datetime_utc);
   const [submitted, setSubmitted] = useState(!!game.user_prediction);
 
   const awayName = teamNames[game.away_team_id] || game.away_team_id;
