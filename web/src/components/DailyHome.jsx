@@ -137,7 +137,11 @@ export default function DailyHome({ onNavigateToGame }) {
           ) : (
             <div className="space-y-4">
               <div className="text-sm text-slate-400 mb-2">
-                {games.length} game{games.length !== 1 ? 's' : ''} today — powered by 1,000-sim Monte Carlo engine
+                {games.length} game{games.length !== 1 ? 's' : ''} today
+                {games.some(g => g.game_type === 'S') && (
+                  <span className="ml-2 text-green-400 font-medium">Spring Training</span>
+                )}
+                {' '}— powered by 1,000-sim Monte Carlo engine
               </div>
               {games.map(game => (
                 <GameCard

@@ -48,6 +48,8 @@ class GameCardResponse(BaseModel):
     venue: str
     status: str
 
+    game_type: str = "R"  # "R" = Regular, "S" = Spring Training
+
     # 엔진 예측
     mc_away_win_pct: float = 0.5
     mc_home_win_pct: float = 0.5
@@ -161,6 +163,7 @@ def get_today_games() -> list[GameCardResponse]:
             home_starter_name=game.home_starter_name,
             venue=game.venue,
             status=game.status,
+            game_type=game.game_type,
             mc_away_win_pct=pred.mc_away_win_pct if pred else 0.5,
             mc_home_win_pct=pred.mc_home_win_pct if pred else 0.5,
             final_away_win_pct=pred.final_away_win_pct if pred else 0.5,
@@ -218,6 +221,7 @@ def get_games_by_date(target_date: str) -> list[GameCardResponse]:
             home_starter_name=game.home_starter_name,
             venue=game.venue,
             status=game.status,
+            game_type=game.game_type,
             mc_away_win_pct=pred.mc_away_win_pct if pred else 0.5,
             mc_home_win_pct=pred.mc_home_win_pct if pred else 0.5,
             final_away_win_pct=pred.final_away_win_pct if pred else 0.5,
@@ -271,6 +275,7 @@ def submit_prediction(req: PredictionRequest) -> dict:
             predicted_away_score=req.predicted_away_score,
             predicted_home_score=req.predicted_home_score,
             confidence=req.confidence,
+            game_type=game.game_type,
         )
         return {"status": "submitted", "prediction": asdict(pred)}
     except ValueError as e:

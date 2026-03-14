@@ -32,6 +32,7 @@ class DailyGame:
     away_score: Optional[int] = None
     home_score: Optional[int] = None
     venue: str = ""
+    game_type: str = "R"  # "R" = Regular, "S" = Spring Training
 
 
 @dataclass
@@ -83,7 +84,8 @@ class DailyDataPipeline:
         games: list[DailyGame] = []
         for date_entry in sched.get("dates", []):
             for g in date_entry.get("games", []):
-                if g.get("gameType") != "R":
+                game_type = g.get("gameType", "")
+                if game_type not in ("R", "S"):
                     continue
 
                 teams = g.get("teams", {})
@@ -128,6 +130,7 @@ class DailyDataPipeline:
                     away_score=away_info.get("score"),
                     home_score=home_info.get("score"),
                     venue=venue,
+                    game_type=game_type,
                 ))
 
         logger.info("Found %d games for %s", len(games), date_str)
@@ -200,7 +203,8 @@ class DailyDataPipeline:
             d = date_entry["date"]
             day_games = []
             for g in date_entry.get("games", []):
-                if g.get("gameType") != "R":
+                game_type = g.get("gameType", "")
+                if game_type not in ("R", "S"):
                     continue
                 teams = g.get("teams", {})
                 away_info = teams.get("away", {})
@@ -228,6 +232,7 @@ class DailyDataPipeline:
                     home_team_id=home_abbr,
                     venue=g.get("venue", {}).get("name", ""),
                     status=g.get("status", {}).get("detailedState", "Scheduled"),
+                    game_type=game_type,
                 ))
             if day_games:
                 by_date[d] = day_games

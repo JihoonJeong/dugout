@@ -30,6 +30,7 @@ class UserPrediction:
     created_at: str = ""
     updated_at: str = ""
     locked: bool = False
+    game_type: str = "R"  # "R" = Regular, "S" = Spring Training
 
     # 실제 결과 (나중에 채워짐)
     actual_winner: Optional[str] = None
@@ -77,6 +78,7 @@ class PredictionStore:
         predicted_away_score: int | None = None,
         predicted_home_score: int | None = None,
         confidence: float | None = None,
+        game_type: str = "R",
     ) -> UserPrediction:
         """예측 제출."""
         predictions = self._load_date(game_date)
@@ -101,6 +103,7 @@ class PredictionStore:
             confidence=confidence,
             created_at=now,
             updated_at=now,
+            game_type=game_type,
         )
 
         predictions.append(asdict(pred))
@@ -203,7 +206,7 @@ class PredictionStore:
         return result_breakdown
 
     def get_cumulative_stats(self) -> CumulativeStats:
-        """전체 누적 성적 계산."""
+        """전체 누적 성적 계산 (정규시즌만)."""
         stats = CumulativeStats()
 
         for path in sorted(self._store_dir.glob("*.json")):
@@ -211,6 +214,9 @@ class PredictionStore:
                 continue
             predictions = self._load_date(path.stem)
             for p in predictions:
+                # 스프링 트레이닝은 누적 성적에서 제외
+                if p.get("game_type", "R") == "S":
+                    continue
                 stats.total_predictions += 1
                 if p.get("actual_winner") is not None:
                     stats.total_scored += 1

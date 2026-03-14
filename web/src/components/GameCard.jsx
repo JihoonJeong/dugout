@@ -82,6 +82,13 @@ export default function GameCard({ game, teamNames, onPredictionSubmit }) {
 
   return (
     <div className="bg-slate-800/80 rounded-xl border border-slate-700 overflow-hidden hover:border-slate-600 transition-colors">
+      {/* Spring Training badge */}
+      {game.game_type === 'S' && (
+        <div className="bg-green-900/40 border-b border-green-700/30 px-4 py-1 text-center">
+          <span className="text-green-400 text-xs font-medium tracking-wider uppercase">Spring Training</span>
+        </div>
+      )}
+
       {/* Main row */}
       <div
         className="p-4 cursor-pointer"
