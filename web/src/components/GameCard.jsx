@@ -127,7 +127,6 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
                   <span className={favored === 'away' ? 'text-amber-400 font-bold' : 'text-slate-400'}>{awayPct}%</span>
                   <span className="text-slate-500">
                     {game.game_time} ET
-                    {timeLeft && !isLocked && <span className="text-amber-500/70 text-xs ml-1 countdown-pulse">({timeLeft})</span>}
                     {isLocked && !submitted && <span className="text-red-400/70 text-xs ml-1">🔒</span>}
                   </span>
                   <span className={favored === 'home' ? 'text-amber-400 font-bold' : 'text-slate-400'}>{homePct}%</span>
@@ -145,7 +144,6 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
                 <div className="text-slate-400 text-sm font-medium">vs</div>
                 <div className="text-slate-500 text-sm">
                   {game.game_time} ET
-                  {timeLeft && !isLocked && <span className="text-amber-500/70 text-xs ml-1 countdown-pulse">({timeLeft})</span>}
                 </div>
               </div>
             )}
@@ -230,7 +228,7 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
                 disabled={!predWinner || submitting || isLocked}
                 className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 font-bold rounded-lg transition-colors text-sm"
               >
-                {isLocked ? '🔒 Prediction Window Closed' : submitting ? 'Submitting...' : 'Lock In Prediction'}
+                {isLocked ? '🔒 Prediction Window Closed' : submitting ? 'Submitting...' : timeLeft ? `Lock In (${timeLeft} left)` : 'Lock In Prediction'}
               </button>
             </div>
           ) : (
