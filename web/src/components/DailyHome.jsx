@@ -149,6 +149,10 @@ export default function DailyHome({ onNavigateToGame }) {
         {loading ? (
           <div className="text-center py-12 text-slate-400">
             <div className="text-lg mb-2">Loading schedule...</div>
+            <div className="text-sm text-slate-500 mt-3 max-w-sm mx-auto leading-relaxed">
+              Dugout is in beta and runs on a free-tier server that sleeps when idle.
+              The first load may take over a minute — thank you for your patience!
+            </div>
           </div>
         ) : tab === 'today' ? (
           games.length === 0 ? (
