@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { getLeaderboard, getManagerId } from '../api';
+import { useLanguage } from '../i18n/index.jsx';
 
 export default function Leaderboard({ onClose }) {
+  const { t } = useLanguage();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const myId = getManagerId();
@@ -16,7 +18,7 @@ export default function Leaderboard({ onClose }) {
   return (
     <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-4 mb-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white">Leaderboard</h3>
+        <h3 className="text-lg font-bold text-white">{t('leaderboard.title')}</h3>
         <button onClick={onClose} className="text-slate-400 hover:text-white text-sm">Close</button>
       </div>
 
@@ -24,7 +26,7 @@ export default function Leaderboard({ onClose }) {
         <div className="text-center text-slate-400 py-6">Loading...</div>
       ) : data.length === 0 ? (
         <div className="text-center text-slate-400 py-6 text-sm">
-          No scored predictions yet. Make picks and check back after games finish!
+          {t('leaderboard.noPredictions')}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -72,7 +74,7 @@ export default function Leaderboard({ onClose }) {
             </tbody>
           </table>
           <div className="text-xs text-slate-500 mt-2 text-center">
-            Regular season only — Spring Training excluded
+            {t('stats.regularOnly')}
           </div>
         </div>
       )}

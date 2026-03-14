@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getDailyGames, getYesterdayResults, getManagerNickname } from '../api';
+import { useLanguage, SUPPORTED_LANGS } from '../i18n/index.jsx';
 import GameCard from './GameCard';
 import ResultCard from './ResultCard';
 import MyStats from './MyStats';
@@ -24,14 +25,10 @@ const TEAM_NAMES = {
   'ロッテ': 'Marines', '日本ハム': 'Fighters',
 };
 
-const LEAGUE_FILTERS = [
-  { id: 'all', label: 'ALL' },
-  { id: 'mlb', label: 'MLB' },
-  { id: 'kbo', label: 'KBO' },
-  { id: 'npb', label: 'NPB' },
-];
+const LEAGUE_IDS = ['all', 'mlb', 'kbo', 'npb'];
 
 export default function DailyHome({ onNavigateToGame, onWatchSim }) {
+  const { t, lang, setLang } = useLanguage();
   const [tab, setTab] = useState('today');
   const [league, setLeague] = useState('all');
   const [games, setGames] = useState([]);
@@ -63,19 +60,19 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
     setLoading(false);
   }
 
-  // Filter by league
   const filteredGames = league === 'all' ? games : games.filter(g => (g.league_id || 'mlb') === league);
   const filteredResults = league === 'all' ? results : results.filter(r => (r.league_id || 'mlb') === league);
 
-  // Count games per league
-  const leagueCounts = {};
   const sourceList = tab === 'today' ? games : results;
+  const leagueCounts = {};
   for (const item of sourceList) {
     const lid = item.league_id || 'mlb';
     leagueCounts[lid] = (leagueCounts[lid] || 0) + 1;
   }
 
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const today = new Date().toLocaleDateString(lang === 'ko' ? 'ko-KR' : lang === 'ja' ? 'ja-JP' : 'en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
 
   return (
     <div className="min-h-screen">
@@ -85,18 +82,34 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-white">
-                <span className="text-amber-400">⚾</span> Dugout Daily
+                <span className="text-amber-400">⚾</span> {t('app.title')}
               </h1>
               <p className="text-slate-400 text-sm mt-1">
                 {today}
                 {managerName && <span className="text-amber-400/70 ml-2">— Mgr. {managerName}</span>}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {/* Language toggle */}
+              <div className="flex bg-slate-900/50 rounded-md">
+                {SUPPORTED_LANGS.map(l => (
+                  <button
+                    key={l.code}
+                    onClick={() => setLang(l.code)}
+                    className={`px-2 py-1 text-xs font-medium transition-colors ${
+                      lang === l.code
+                        ? 'text-amber-400 bg-amber-500/10'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
               <button
                 onClick={() => setShowSettings(s => !s)}
                 className="px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 transition-colors"
-                title="Settings"
+                title={t('nav.settings')}
               >
                 ⚙
               </button>
@@ -104,21 +117,21 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                 onClick={onNavigateToGame}
                 className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 transition-colors"
               >
-                Sim Mode →
+                {t('app.simMode')} →
               </button>
             </div>
           </div>
 
           {/* League filter tabs */}
           <div className="flex gap-1 mb-3">
-            {LEAGUE_FILTERS.map(lf => {
-              const count = lf.id === 'all' ? sourceList.length : (leagueCounts[lf.id] || 0);
-              const isActive = league === lf.id;
-              const hasGames = lf.id === 'all' || count > 0;
+            {LEAGUE_IDS.map(lid => {
+              const count = lid === 'all' ? sourceList.length : (leagueCounts[lid] || 0);
+              const isActive = league === lid;
+              const hasGames = lid === 'all' || count > 0;
               return (
                 <button
-                  key={lf.id}
-                  onClick={() => setLeague(lf.id)}
+                  key={lid}
+                  onClick={() => setLeague(lid)}
                   disabled={!hasGames && !loading}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold tracking-wider transition-colors ${
                     isActive
@@ -128,7 +141,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                         : 'text-slate-600 cursor-default'
                   }`}
                 >
-                  {lf.label}
+                  {t(`leagues.${lid}`)}
                   {!loading && count > 0 && <span className="ml-1 text-slate-500 font-normal">{count}</span>}
                 </button>
               );
@@ -145,7 +158,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Today's Games
+              {t('nav.todayGames')}
             </button>
             <button
               onClick={() => setTab('results')}
@@ -155,7 +168,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Yesterday's Results
+              {t('nav.yesterday')}
             </button>
             <button
               onClick={() => setShowStats(s => !s)}
@@ -165,7 +178,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Stats
+              {t('nav.stats')}
             </button>
             <button
               onClick={() => setShowLeaderboard(s => !s)}
@@ -175,7 +188,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Ranks
+              {t('nav.ranks')}
             </button>
           </div>
         </div>
@@ -203,23 +216,24 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
 
         {loading ? (
           <div className="text-center py-12 text-slate-400">
-            <div className="text-lg mb-2">Loading schedule...</div>
+            <div className="text-lg mb-2">{t('daily.loadingSchedule')}</div>
             <div className="text-sm text-slate-500 mt-3 max-w-sm mx-auto leading-relaxed">
-              Dugout is in beta and runs on a free-tier server that sleeps when idle.
-              The first load may take over a minute — thank you for your patience!
+              {t('app.beta')}
             </div>
           </div>
         ) : tab === 'today' ? (
           filteredGames.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
-              {league !== 'all' ? `No ${league.toUpperCase()} games scheduled for today` : 'No games scheduled for today'}
+              {league !== 'all'
+                ? t('daily.noGamesLeague', { league: league.toUpperCase() })
+                : t('daily.noGames')}
             </div>
           ) : (
             <div className="space-y-4">
               <div className="text-sm text-slate-400 mb-2">
-                {filteredGames.length} game{filteredGames.length !== 1 ? 's' : ''} today
+                {t('daily.gamesCount', { count: filteredGames.length })}
                 {filteredGames.some(g => g.game_type === 'S') && (
-                  <span className="ml-2 text-green-400 font-medium">Spring Training</span>
+                  <span className="ml-2 text-green-400 font-medium">{t('leagues.springTraining')}</span>
                 )}
               </div>
               {filteredGames.map(game => (
@@ -237,7 +251,9 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
         ) : (
           filteredResults.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
-              {league !== 'all' ? `No ${league.toUpperCase()} results from yesterday` : 'No results from yesterday'}
+              {league !== 'all'
+                ? t('daily.noResultsLeague', { league: league.toUpperCase() })
+                : t('daily.noResults')}
             </div>
           ) : (
             <div className="space-y-4">

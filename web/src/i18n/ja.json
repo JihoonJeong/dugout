@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "ダグアウト デイリー",
+    "simMode": "シミュレーション",
+    "beta": "ダグアウトはベータ版で、無料サーバーを使用しています。初回ロードに1分以上かかる場合があります。しばらくお待ちください！"
+  },
+  "nav": {
+    "todayGames": "今日の試合",
+    "yesterday": "昨日の結果",
+    "stats": "成績",
+    "ranks": "順位",
+    "settings": "設定"
+  },
+  "leagues": {
+    "all": "全て",
+    "mlb": "MLB",
+    "kbo": "KBO",
+    "npb": "NPB",
+    "springTraining": "スプリングトレーニング",
+    "preseason": "オープン戦"
+  },
+  "daily": {
+    "gamesCount": "今日{count}試合",
+    "noGames": "今日の試合はありません",
+    "noGamesLeague": "今日の{league}の試合はありません",
+    "noResults": "昨日の結果はありません",
+    "noResultsLeague": "昨日の{league}の結果はありません",
+    "loadingSchedule": "スケジュール読み込み中...",
+    "vs": "vs"
+  },
+  "prediction": {
+    "title": "あなたの予想",
+    "wins": "{team}勝利",
+    "optional": "(任意)",
+    "lockIn": "予想を確定",
+    "lockInTimer": "確定する（残り{time}）",
+    "windowClosed": "予想受付終了",
+    "submitting": "送信中...",
+    "submitted": "予想送信済み",
+    "locked": "予想が確定しました。頑張って！",
+    "failed": "予想の送信に失敗しました"
+  },
+  "engine": {
+    "predict": "エンジン予測",
+    "running": "エンジン実行中...",
+    "watchSim": "ライブシミュレーション",
+    "quickSim": "クイックシム",
+    "avgTotal": "平均得点",
+    "runs": "点",
+    "venue": "球場",
+    "proj": "予想",
+    "starterData": "先発データ"
+  },
+  "ai": {
+    "title": "AIコーチ",
+    "analyze": "AIコーチに聞く",
+    "analyzing": "AIが対戦を分析中...",
+    "setupKey": "AI分析のため設定でAPIキーを入力してください",
+    "keyFactors": "重要ポイント",
+    "risks": "リスク",
+    "confidence": "確信度"
+  },
+  "results": {
+    "scoringPlays": "得点プレー",
+    "showMore": "あと{count}件表示",
+    "showLess": "閉じる",
+    "boxScore": "ボックススコア",
+    "batting": "打撃",
+    "pitching": "投球",
+    "win": "勝",
+    "loss": "負",
+    "save": "S",
+    "yourPick": "あなたの予想",
+    "enginePick": "エンジン",
+    "correct": "的中！",
+    "wrong": "はずれ"
+  },
+  "stats": {
+    "title": "成績",
+    "totalPredictions": "予想数",
+    "scored": "採点済み",
+    "winAccuracy": "的中率",
+    "avgPoints": "平均点",
+    "totalPoints": "合計点",
+    "exactScores": "スコア的中",
+    "regularOnly": "レギュラーシーズンのみ"
+  },
+  "leaderboard": {
+    "title": "リーダーボード",
+    "rank": "#",
+    "manager": "監督",
+    "games": "試合",
+    "accuracy": "的中率",
+    "avgPts": "平均",
+    "noPredictions": "まだ採点された予想はありません"
+  },
+  "manager": {
+    "welcome": "ダグアウトへようこそ",
+    "chooseNickname": "監督のニックネームを決めてください",
+    "placeholder": "ニックネーム入力（最大20文字）",
+    "register": "監督登録",
+    "registering": "登録中..."
+  },
+  "settings": {
+    "title": "設定",
+    "language": "言語",
+    "apiKey": "APIキー（BYOK）",
+    "apiKeyPlaceholder": "Anthropic APIキーを入力",
+    "apiKeyHint": "キーはブラウザにのみ保存されます — サーバーには送信されません",
+    "save": "保存",
+    "saved": "保存しました！"
+  }
+}

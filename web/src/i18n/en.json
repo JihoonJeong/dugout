@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "Dugout Daily",
+    "simMode": "Sim Mode",
+    "beta": "Dugout is in beta and runs on a free-tier server that sleeps when idle. The first load may take over a minute — thank you for your patience!"
+  },
+  "nav": {
+    "todayGames": "Today's Games",
+    "yesterday": "Yesterday's Results",
+    "stats": "Stats",
+    "ranks": "Ranks",
+    "settings": "Settings"
+  },
+  "leagues": {
+    "all": "ALL",
+    "mlb": "MLB",
+    "kbo": "KBO",
+    "npb": "NPB",
+    "springTraining": "Spring Training",
+    "preseason": "Preseason"
+  },
+  "daily": {
+    "gamesCount": "{count} game(s) today",
+    "noGames": "No games scheduled for today",
+    "noGamesLeague": "No {league} games scheduled for today",
+    "noResults": "No results from yesterday",
+    "noResultsLeague": "No {league} results from yesterday",
+    "loadingSchedule": "Loading schedule...",
+    "vs": "vs"
+  },
+  "prediction": {
+    "title": "Your Prediction",
+    "wins": "{team} wins",
+    "optional": "(optional)",
+    "lockIn": "Lock In Prediction",
+    "lockInTimer": "Lock In ({time} left)",
+    "windowClosed": "Prediction Window Closed",
+    "submitting": "Submitting...",
+    "submitted": "Prediction submitted",
+    "locked": "Prediction locked. Good luck!",
+    "failed": "Failed to submit prediction"
+  },
+  "engine": {
+    "predict": "Engine Prediction",
+    "running": "Running engine...",
+    "watchSim": "Watch Live Sim",
+    "quickSim": "Quick Sim",
+    "avgTotal": "Avg Total",
+    "runs": "runs",
+    "venue": "Venue",
+    "proj": "Proj",
+    "starterData": "Starter data"
+  },
+  "ai": {
+    "title": "AI Coach",
+    "analyze": "Ask AI Coach",
+    "analyzing": "AI analyzing matchup...",
+    "setupKey": "Set up API key in Settings for AI analysis",
+    "keyFactors": "Key Factors",
+    "risks": "Risks",
+    "confidence": "Confidence"
+  },
+  "results": {
+    "scoringPlays": "Scoring Plays",
+    "showMore": "Show {count} more",
+    "showLess": "Show less",
+    "boxScore": "Box Score",
+    "batting": "Batting",
+    "pitching": "Pitching",
+    "win": "W",
+    "loss": "L",
+    "save": "SV",
+    "yourPick": "Your pick",
+    "enginePick": "Engine",
+    "correct": "Correct!",
+    "wrong": "Wrong"
+  },
+  "stats": {
+    "title": "My Stats",
+    "totalPredictions": "Predictions",
+    "scored": "Scored",
+    "winAccuracy": "Win Accuracy",
+    "avgPoints": "Avg Points",
+    "totalPoints": "Total Points",
+    "exactScores": "Exact Scores",
+    "regularOnly": "Regular season only"
+  },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "rank": "#",
+    "manager": "Manager",
+    "games": "Games",
+    "accuracy": "Accuracy",
+    "avgPts": "Avg Pts",
+    "noPredictions": "No scored predictions yet"
+  },
+  "manager": {
+    "welcome": "Welcome to Dugout",
+    "chooseNickname": "Choose your manager nickname",
+    "placeholder": "Enter nickname (max 20 chars)",
+    "register": "Start Managing",
+    "registering": "Registering..."
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "apiKey": "API Key (BYOK)",
+    "apiKeyPlaceholder": "Enter your Anthropic API key",
+    "apiKeyHint": "Your key stays in your browser — never sent to our server",
+    "save": "Save",
+    "saved": "Saved!"
+  }
+}

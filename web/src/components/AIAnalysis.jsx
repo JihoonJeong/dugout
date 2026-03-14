@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { analyzeMatchup } from '../api';
+import { useLanguage } from '../i18n/index.jsx';
 
 const TEAM_NAMES = {
+  // MLB
   NYY: 'New York Yankees', BOS: 'Boston Red Sox', TBR: 'Tampa Bay Rays',
   BAL: 'Baltimore Orioles', TOR: 'Toronto Blue Jays',
   CLE: 'Cleveland Guardians', MIN: 'Minnesota Twins', CHW: 'Chicago White Sox',
@@ -14,9 +16,20 @@ const TEAM_NAMES = {
   PIT: 'Pittsburgh Pirates', CIN: 'Cincinnati Reds',
   LAD: 'Los Angeles Dodgers', SDP: 'San Diego Padres', SFG: 'San Francisco Giants',
   ARI: 'Arizona Diamondbacks', COL: 'Colorado Rockies',
+  // KBO
+  LG: 'LG Twins', '두산': 'Doosan Bears', KIA: 'KIA Tigers', '삼성': 'Samsung Lions',
+  '롯데': 'Lotte Giants', '한화': 'Hanwha Eagles', SSG: 'SSG Landers',
+  NC: 'NC Dinos', KT: 'KT Wiz', '키움': 'Kiwoom Heroes',
+  // NPB
+  '巨人': 'Yomiuri Giants', '阪神': 'Hanshin Tigers', '中日': 'Chunichi Dragons',
+  DeNA: 'Yokohama DeNA BayStars', '広島': 'Hiroshima Carp', 'ヤクルト': 'Tokyo Yakult Swallows',
+  'オリックス': 'Orix Buffaloes', 'ソフトバンク': 'Fukuoka SoftBank Hawks',
+  '西武': 'Saitama Seibu Lions', '楽天': 'Tohoku Rakuten Golden Eagles',
+  'ロッテ': 'Chiba Lotte Marines', '日本ハム': 'Hokkaido Nippon-Ham Fighters',
 };
 
 export default function AIAnalysis({ game, onClose }) {
+  const { t } = useLanguage();
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -79,7 +92,7 @@ export default function AIAnalysis({ game, onClose }) {
               : 'bg-slate-700 text-slate-500 cursor-not-allowed'
           }`}
         >
-          {hasKey ? '🤖 Get AI Coach Analysis' : '🤖 Set up API key in Settings for AI analysis'}
+          {hasKey ? `🤖 ${t('ai.analyze')}` : `🤖 ${t('ai.setupKey')}`}
         </button>
       </div>
     );
@@ -88,7 +101,7 @@ export default function AIAnalysis({ game, onClose }) {
   return (
     <div className="mt-3 border-t border-slate-700 pt-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-purple-400 uppercase tracking-wider font-medium">AI Coach Analysis</span>
+        <span className="text-xs text-purple-400 uppercase tracking-wider font-medium">{t('ai.title')}</span>
         {onClose && (
           <button onClick={() => { setAnalysis(null); setError(null); onClose?.(); }}
             className="text-slate-500 hover:text-white text-xs">✕</button>
@@ -97,7 +110,7 @@ export default function AIAnalysis({ game, onClose }) {
 
       {loading && (
         <div className="text-center py-4 text-slate-400 text-sm">
-          <div className="cursor-blink">Analyzing matchup</div>
+          <div className="cursor-blink">{t('ai.analyzing')}</div>
         </div>
       )}
 
@@ -135,7 +148,7 @@ export default function AIAnalysis({ game, onClose }) {
           {/* Key factors */}
           {analysis.key_factors?.length > 0 && (
             <div>
-              <div className="text-xs text-slate-500 mb-1">Key Factors</div>
+              <div className="text-xs text-slate-500 mb-1">{t('ai.keyFactors')}</div>
               <ul className="space-y-1">
                 {analysis.key_factors.map((f, i) => (
                   <li key={i} className="text-xs text-slate-400 flex items-start gap-1.5">
@@ -150,7 +163,7 @@ export default function AIAnalysis({ game, onClose }) {
           {/* Risk factors */}
           {analysis.risk_factors?.length > 0 && (
             <div>
-              <div className="text-xs text-slate-500 mb-1">Risks</div>
+              <div className="text-xs text-slate-500 mb-1">{t('ai.risks')}</div>
               <ul className="space-y-1">
                 {analysis.risk_factors.map((f, i) => (
                   <li key={i} className="text-xs text-red-400/70 flex items-start gap-1.5">

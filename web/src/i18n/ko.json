@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "더그아웃 데일리",
+    "simMode": "시뮬레이션",
+    "beta": "더그아웃은 베타 서비스이며 무료 서버를 사용합니다. 첫 로딩에 1분 이상 걸릴 수 있습니다. 잠시만 기다려 주세요!"
+  },
+  "nav": {
+    "todayGames": "오늘의 경기",
+    "yesterday": "어제 결과",
+    "stats": "성적",
+    "ranks": "순위",
+    "settings": "설정"
+  },
+  "leagues": {
+    "all": "전체",
+    "mlb": "MLB",
+    "kbo": "KBO",
+    "npb": "NPB",
+    "springTraining": "스프링 트레이닝",
+    "preseason": "시범 경기"
+  },
+  "daily": {
+    "gamesCount": "오늘 {count}경기",
+    "noGames": "오늘 경기가 없습니다",
+    "noGamesLeague": "오늘 {league} 경기가 없습니다",
+    "noResults": "어제 결과가 없습니다",
+    "noResultsLeague": "어제 {league} 결과가 없습니다",
+    "loadingSchedule": "경기 일정 로딩 중...",
+    "vs": "vs"
+  },
+  "prediction": {
+    "title": "나의 예측",
+    "wins": "{team} 승리",
+    "optional": "(선택사항)",
+    "lockIn": "예측 확정",
+    "lockInTimer": "예측 확정 ({time} 남음)",
+    "windowClosed": "예측 마감",
+    "submitting": "제출 중...",
+    "submitted": "예측 완료",
+    "locked": "예측이 확정되었습니다. 행운을 빕니다!",
+    "failed": "예측 제출에 실패했습니다"
+  },
+  "engine": {
+    "predict": "엔진 예측",
+    "running": "엔진 실행 중...",
+    "watchSim": "라이브 시뮬레이션",
+    "quickSim": "빠른 시뮬",
+    "avgTotal": "평균 득점",
+    "runs": "점",
+    "venue": "구장",
+    "proj": "예상",
+    "starterData": "선발 데이터"
+  },
+  "ai": {
+    "title": "AI 코치",
+    "analyze": "AI 코치에게 물어보기",
+    "analyzing": "AI가 매치업 분석 중...",
+    "setupKey": "AI 분석을 위해 설정에서 API 키를 입력하세요",
+    "keyFactors": "핵심 요인",
+    "risks": "리스크",
+    "confidence": "확신도"
+  },
+  "results": {
+    "scoringPlays": "득점 플레이",
+    "showMore": "{count}개 더 보기",
+    "showLess": "접기",
+    "boxScore": "박스 스코어",
+    "batting": "타격",
+    "pitching": "투구",
+    "win": "승",
+    "loss": "패",
+    "save": "세",
+    "yourPick": "내 예측",
+    "enginePick": "엔진",
+    "correct": "적중!",
+    "wrong": "빗나감"
+  },
+  "stats": {
+    "title": "내 성적",
+    "totalPredictions": "예측 수",
+    "scored": "채점",
+    "winAccuracy": "적중률",
+    "avgPoints": "평균 점수",
+    "totalPoints": "총 점수",
+    "exactScores": "정확 스코어",
+    "regularOnly": "정규 시즌만 포함"
+  },
+  "leaderboard": {
+    "title": "리더보드",
+    "rank": "#",
+    "manager": "감독",
+    "games": "경기",
+    "accuracy": "적중률",
+    "avgPts": "평균",
+    "noPredictions": "아직 채점된 예측이 없습니다"
+  },
+  "manager": {
+    "welcome": "더그아웃에 오신 것을 환영합니다",
+    "chooseNickname": "감독 닉네임을 정해주세요",
+    "placeholder": "닉네임 입력 (최대 20자)",
+    "register": "감독 등록",
+    "registering": "등록 중..."
+  },
+  "settings": {
+    "title": "설정",
+    "language": "언어",
+    "apiKey": "API 키 (BYOK)",
+    "apiKeyPlaceholder": "Anthropic API 키를 입력하세요",
+    "apiKeyHint": "키는 브라우저에만 저장됩니다 — 서버로 전송되지 않습니다",
+    "save": "저장",
+    "saved": "저장됨!"
+  }
+}
