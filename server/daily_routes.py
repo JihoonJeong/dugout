@@ -144,7 +144,7 @@ def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardRes
 
     # 예측 캐시 확인
     if today_str not in _prediction_cache:
-        predictions = _predictor.predict_all(games, n_sims=1000)
+        predictions = _predictor.predict_all(games, n_sims=200)
         _prediction_cache[today_str] = predictions
     else:
         predictions = _prediction_cache[today_str]
@@ -206,7 +206,7 @@ def get_games_by_date(target_date: str) -> list[GameCardResponse]:
         return []
 
     if target_date not in _prediction_cache:
-        predictions = _predictor.predict_all(games, n_sims=1000)
+        predictions = _predictor.predict_all(games, n_sims=200)
         _prediction_cache[target_date] = predictions
     else:
         predictions = _prediction_cache[target_date]

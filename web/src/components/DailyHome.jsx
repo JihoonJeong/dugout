@@ -149,7 +149,7 @@ export default function DailyHome({ onNavigateToGame }) {
         {loading ? (
           <div className="text-center py-12 text-slate-400">
             <div className="text-lg mb-2">Loading predictions...</div>
-            <div className="text-sm">Running 1,000 Monte Carlo simulations per game</div>
+            <div className="text-sm">Running Monte Carlo simulations — first load may take a moment</div>
           </div>
         ) : tab === 'today' ? (
           games.length === 0 ? (
@@ -163,7 +163,7 @@ export default function DailyHome({ onNavigateToGame }) {
                 {games.some(g => g.game_type === 'S') && (
                   <span className="ml-2 text-green-400 font-medium">Spring Training</span>
                 )}
-                {' '}— powered by 1,000-sim Monte Carlo engine
+                {' '}— Monte Carlo engine
               </div>
               {games.map(game => (
                 <GameCard
