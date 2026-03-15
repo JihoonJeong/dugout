@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -21,6 +22,13 @@ from data.leagues.kbo.pipeline import build_kbo_data
 from data.leagues.npb.pipeline import build_npb_data
 
 logger = logging.getLogger(__name__)
+
+# League timezone mapping for per-league "today" calculation
+LEAGUE_TZS = {
+    "mlb": ZoneInfo("America/New_York"),
+    "kbo": ZoneInfo("Asia/Seoul"),
+    "npb": ZoneInfo("Asia/Tokyo"),
+}
 
 router = APIRouter(prefix="/daily", tags=["daily"])
 
@@ -182,6 +190,85 @@ class MyStatsResponse(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────
 
+
+def _league_date(user_now_utc: datetime, league_tz: ZoneInfo) -> date:
+    """Convert UTC time to league-local date, using 06:00 boundary.
+
+    If the league-local hour is < 6, we consider it still "yesterday" so
+    late-night games are grouped with the same league-local date.
+    """
+    league_now = user_now_utc.astimezone(league_tz)
+    if league_now.hour < 6:
+        return (league_now - timedelta(days=1)).date()
+    return league_now.date()
+
+
+def _user_local_date(user_now_utc: datetime, user_tz_name: str) -> date:
+    """Derive the user's local date from UTC + their timezone string."""
+    try:
+        user_tz = ZoneInfo(user_tz_name)
+    except (KeyError, Exception):
+        user_tz = LEAGUE_TZS["mlb"]  # fallback to ET
+    return user_now_utc.astimezone(user_tz).date()
+
+
+def _fetch_games_per_league(user_now_utc: datetime) -> list[DailyGame]:
+    """Fetch games for each league using the league-appropriate date."""
+    all_games: list[DailyGame] = []
+
+    if _pipeline:
+        mlb_date = _league_date(user_now_utc, LEAGUE_TZS["mlb"])
+        try:
+            all_games.extend(_pipeline.fetch_games(mlb_date))
+        except Exception as e:
+            logger.warning("MLB fetch failed: %s", e)
+
+    if _kbo_pipeline:
+        kbo_date = _league_date(user_now_utc, LEAGUE_TZS["kbo"])
+        try:
+            all_games.extend(_kbo_pipeline.fetch_games(kbo_date))
+        except Exception as e:
+            logger.warning("KBO fetch failed: %s", e)
+
+    if _npb_pipeline:
+        npb_date = _league_date(user_now_utc, LEAGUE_TZS["npb"])
+        try:
+            all_games.extend(_npb_pipeline.fetch_games(npb_date))
+        except Exception as e:
+            logger.warning("NPB fetch failed: %s", e)
+
+    return all_games
+
+
+def _fetch_results_per_league(user_now_utc: datetime) -> list:
+    """Fetch yesterday's results for each league using league-appropriate dates."""
+    from daily.pipelines.base import DailyResult
+    all_results: list[DailyResult] = []
+
+    if _pipeline:
+        mlb_yesterday = _league_date(user_now_utc, LEAGUE_TZS["mlb"]) - timedelta(days=1)
+        try:
+            all_results.extend(_pipeline.fetch_results(mlb_yesterday))
+        except Exception as e:
+            logger.warning("MLB results fetch failed: %s", e)
+
+    if _kbo_pipeline:
+        kbo_yesterday = _league_date(user_now_utc, LEAGUE_TZS["kbo"]) - timedelta(days=1)
+        try:
+            all_results.extend(_kbo_pipeline.fetch_results(kbo_yesterday))
+        except Exception as e:
+            logger.warning("KBO results fetch failed: %s", e)
+
+    if _npb_pipeline:
+        npb_yesterday = _league_date(user_now_utc, LEAGUE_TZS["npb"]) - timedelta(days=1)
+        try:
+            all_results.extend(_npb_pipeline.fetch_results(npb_yesterday))
+        except Exception as e:
+            logger.warning("NPB results fetch failed: %s", e)
+
+    return all_results
+
+
 def _fetch_all_games(target_date: date) -> list[DailyGame]:
     """모든 리그의 경기를 수집."""
     all_games: list[DailyGame] = []
@@ -238,13 +325,18 @@ def _fetch_all_results(target_date: date) -> list:
 # ── Endpoints ────────────────────────────────────────────
 
 @router.get("/games/today")
-def get_today_games(manager_id: Optional[str] = Query(None)) -> list[GameCardResponse]:
+def get_today_games(
+    manager_id: Optional[str] = Query(None),
+    tz: Optional[str] = Query(None, description="User IANA timezone, e.g. 'Asia/Seoul'"),
+) -> list[GameCardResponse]:
     """오늘 경기 스케줄 — 모든 리그 (시뮬레이션 없이 빠르게 반환)."""
     if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
-    today_str = date.today().isoformat()
-    games = _fetch_all_games(date.today())
+    user_now_utc = datetime.now(timezone.utc)
+    user_tz_name = tz or "America/New_York"
+    today_str = _user_local_date(user_now_utc, user_tz_name).isoformat()
+    games = _fetch_games_per_league(user_now_utc)
 
     if not games:
         return []
@@ -428,15 +520,19 @@ def update_prediction(prediction_id: str, req: PredictionUpdateRequest) -> dict:
 
 
 @router.get("/results/yesterday")
-def get_yesterday_results(manager_id: Optional[str] = Query(None)) -> list[ResultCardResponse]:
+def get_yesterday_results(
+    manager_id: Optional[str] = Query(None),
+    tz: Optional[str] = Query(None, description="User IANA timezone, e.g. 'Asia/Seoul'"),
+) -> list[ResultCardResponse]:
     """어제 결과 + 내 예측 비교 — 모든 리그."""
     if _pipeline is None or _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
-    yesterday = date.today() - timedelta(days=1)
-    yesterday_str = yesterday.isoformat()
+    user_now_utc = datetime.now(timezone.utc)
+    user_tz_name = tz or "America/New_York"
+    yesterday_str = (_user_local_date(user_now_utc, user_tz_name) - timedelta(days=1)).isoformat()
 
-    results = _fetch_all_results(yesterday)
+    results = _fetch_results_per_league(user_now_utc)
     all_user_preds = _store.get_by_date(yesterday_str)
     if manager_id is not None:
         all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
@@ -615,7 +711,6 @@ def _is_locked(game: DailyGame) -> bool:
 
     try:
         game_dt = datetime.fromisoformat(game.game_datetime_utc.replace("Z", "+00:00"))
-        from datetime import timezone
         now = datetime.now(timezone.utc)
         return now >= game_dt - timedelta(hours=1)
     except (ValueError, TypeError):

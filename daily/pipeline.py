@@ -121,10 +121,11 @@ class DailyDataPipeline:
     def fetch_today(self) -> list[DailyGame]:
         return self.fetch_games(date.today())
 
-    def fetch_yesterday_results(self) -> list[DailyResult]:
-        """어제 경기 결과 (linescore + decisions 포함)."""
-        yesterday = date.today() - timedelta(days=1)
-        date_str = yesterday.isoformat()
+    def fetch_results(self, target_date: date | None = None) -> list[DailyResult]:
+        """특정 날짜의 MLB 경기 결과 (linescore + decisions 포함)."""
+        if target_date is None:
+            target_date = date.today() - timedelta(days=1)
+        date_str = target_date.isoformat()
         cache_path = self._cache_dir / f"mlb_results_{date_str}.json"
 
         if cache_path.exists():
@@ -275,6 +276,10 @@ class DailyDataPipeline:
             json.dump([asdict(r) for r in results], f, indent=2)
 
         return results
+
+    def fetch_yesterday_results(self) -> list[DailyResult]:
+        """어제 경기 결과 (하위 호환성)."""
+        return self.fetch_results(date.today() - timedelta(days=1))
 
     def fetch_schedule_range(
         self,

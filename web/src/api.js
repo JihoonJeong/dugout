@@ -85,7 +85,11 @@ export async function getLeaderboard() {
 
 export async function getDailyGames(date = 'today') {
   const mid = getManagerId();
-  const qs = mid ? `?manager_id=${mid}` : '';
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const params = new URLSearchParams();
+  if (mid) params.set('manager_id', mid);
+  if (date === 'today') params.set('tz', tz);
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const url = date === 'today' ? `${BASE}/daily/games/today${qs}` : `${BASE}/daily/games/${date}${qs}`;
   const res = await fetch(url);
   return res.json();
@@ -132,7 +136,11 @@ export async function updatePrediction(predictionId, { gameDate, predictedWinner
 
 export async function getYesterdayResults() {
   const mid = getManagerId();
-  const qs = mid ? `?manager_id=${mid}` : '';
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const params = new URLSearchParams();
+  if (mid) params.set('manager_id', mid);
+  params.set('tz', tz);
+  const qs = `?${params.toString()}`;
   const res = await fetch(`${BASE}/daily/results/yesterday${qs}`);
   return res.json();
 }

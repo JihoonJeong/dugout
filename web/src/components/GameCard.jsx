@@ -3,6 +3,16 @@ import { submitPrediction, predictGame } from '../api';
 import { useLanguage } from '../i18n/index.jsx';
 import AIAnalysis from './AIAnalysis';
 
+function formatLocalTime(gameDatetimeUtc, fallbackTime) {
+  if (!gameDatetimeUtc) return fallbackTime || '';
+  try {
+    const d = new Date(gameDatetimeUtc);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return fallbackTime || '';
+  }
+}
+
 function useCountdown(gameDatetimeUtc) {
   const [timeLeft, setTimeLeft] = useState('');
   const [isLocked, setIsLocked] = useState(false);
@@ -145,7 +155,7 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
                 <div className="flex justify-between text-xs mb-1">
                   <span className={favored === 'away' ? 'text-amber-400 font-bold' : 'text-slate-400'}>{awayPct}%</span>
                   <span className="text-slate-500">
-                    {game.game_time} ET
+                    {formatLocalTime(game.game_datetime_utc, game.game_time)}
                     {isLocked && !submitted && <span className="text-red-400/70 text-xs ml-1">🔒</span>}
                   </span>
                   <span className={favored === 'home' ? 'text-amber-400 font-bold' : 'text-slate-400'}>{homePct}%</span>
@@ -162,7 +172,7 @@ export default function GameCard({ game: initialGame, teamNames, onPredictionSub
               <div className="text-center">
                 <div className="text-slate-400 text-sm font-medium">{t('daily.vs')}</div>
                 <div className="text-slate-500 text-sm">
-                  {game.game_time} ET
+                  {formatLocalTime(game.game_datetime_utc, game.game_time)}
                 </div>
               </div>
             )}
