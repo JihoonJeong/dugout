@@ -14,9 +14,11 @@ from daily.manager import Manager, ManagerStore
 from daily.pipeline import DailyDataPipeline, DailyGame
 from daily.pipelines.kbo import KBOPipeline
 from daily.pipelines.npb import NPBPipeline
-from daily.predictor import DailyPredictor, GamePrediction
+from daily.predictor import DailyPredictor, GamePrediction, MultiLeaguePredictor
 from daily.store import PredictionStore, UserPrediction
 from data.pipeline import DugoutData
+from data.leagues.kbo.pipeline import build_kbo_data
+from data.leagues.npb.pipeline import build_npb_data
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,22 @@ def init_daily(data: DugoutData) -> None:
     _pipeline = DailyDataPipeline()
     _kbo_pipeline = KBOPipeline()
     _npb_pipeline = NPBPipeline()
-    _predictor = DailyPredictor(data)
+
+    # KBO/NPB 데이터 로드 (실패해도 MLB는 동작)
+    kbo_data = None
+    npb_data = None
+    try:
+        kbo_data = build_kbo_data()
+        logger.info("KBO data loaded: %d teams", len(kbo_data.teams))
+    except Exception as e:
+        logger.warning("KBO data load failed (predictions disabled): %s", e)
+    try:
+        npb_data = build_npb_data()
+        logger.info("NPB data loaded: %d teams", len(npb_data.teams))
+    except Exception as e:
+        logger.warning("NPB data load failed (predictions disabled): %s", e)
+
+    _predictor = MultiLeaguePredictor(data, kbo_data, npb_data)
     _store = PredictionStore()
     _manager_store = ManagerStore()
     logger.info("Daily prediction module initialized (MLB + KBO + NPB)")
@@ -274,7 +291,7 @@ def get_games_by_date(target_date: str, manager_id: Optional[str] = Query(None))
 
 @router.post("/games/{game_id}/predict")
 def predict_single_game(game_id: str, game_date: str = Query(...)) -> GameCardResponse:
-    """단일 경기 엔진 예측 (on-demand). MLB만 지원."""
+    """단일 경기 엔진 예측 (on-demand). MLB/KBO/NPB 지원."""
     if _pipeline is None or _predictor is None:
         raise HTTPException(500, "Daily module not initialized")
 
@@ -294,8 +311,8 @@ def predict_single_game(game_id: str, game_date: str = Query(...)) -> GameCardRe
     if game is None:
         raise HTTPException(404, f"Game {game_id} not found on {game_date}")
 
-    # KBO/NPB는 아직 엔진 예측 미지원
-    if game.league_id != "mlb":
+    # 예측 가능 여부 확인
+    if not _predictor.can_predict(game):
         return _build_game_card(game, None, None)
 
     # 캐시 확인
