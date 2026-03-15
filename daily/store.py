@@ -289,14 +289,26 @@ class PredictionStore:
         regular_any = self.get_cumulative_stats(game_type="R")
         use_type = "R" if regular_any.total_scored > 0 else "S"
 
+        # 등록된 감독 ID → nickname 매핑
+        mgr_map = {mgr.manager_id: mgr.nickname for mgr in managers}
+
+        # 모든 예측에서 고유 manager_id 수집 (빈 문자열 포함)
+        all_manager_ids: set[str] = set()
+        for date_key in self._all_date_keys():
+            for p in self._load_date(date_key):
+                mid = p.get("manager_id", "")
+                all_manager_ids.add(mid)
+
         leaderboard = []
-        for mgr in managers:
-            stats = self.get_cumulative_stats(manager_id=mgr.manager_id, game_type=use_type)
+        for mid in all_manager_ids:
+            stats = self.get_cumulative_stats(manager_id=mid, game_type=use_type)
             if stats.total_scored < 1:
                 continue
+            # 닉네임: 등록된 감독이면 닉네임, 아니면 "Anonymous"
+            nickname = mgr_map.get(mid, "Anonymous" if not mid else mid[:8])
             leaderboard.append({
-                "manager_id": mgr.manager_id,
-                "nickname": mgr.nickname,
+                "manager_id": mid,
+                "nickname": nickname,
                 "total_scored": stats.total_scored,
                 "wins_correct": stats.wins_correct,
                 "wins_total": stats.wins_total,
