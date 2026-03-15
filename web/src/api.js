@@ -114,6 +114,7 @@ export async function submitPrediction({ gameId, gameDate, predictedWinner, pred
       predicted_home_score: predictedHomeScore,
       confidence,
       manager_id: getManagerId() || undefined,
+      manager_nickname: getManagerNickname() || undefined,
     }),
   });
   return res.json();

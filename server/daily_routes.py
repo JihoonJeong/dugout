@@ -115,6 +115,7 @@ class PredictionRequest(BaseModel):
     predicted_home_score: Optional[int] = None
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
     manager_id: Optional[str] = None
+    manager_nickname: Optional[str] = None
 
 
 class PredictionUpdateRequest(BaseModel):
@@ -497,6 +498,7 @@ def submit_prediction(req: PredictionRequest) -> dict:
             confidence=req.confidence,
             game_type=game.game_type,
             manager_id=req.manager_id or "",
+            manager_nickname=req.manager_nickname or "",
         )
         return {"status": "submitted", "prediction": asdict(pred)}
     except ValueError as e:
@@ -709,6 +711,11 @@ def get_leaderboard() -> list[dict]:
     """감독 리더보드."""
     if _store is None or _manager_store is None:
         raise HTTPException(500, "Daily module not initialized")
+
+    all_managers = _manager_store.get_all()
+    logger.info("Leaderboard: %d registered managers: %s",
+                len(all_managers),
+                [(m.manager_id, m.nickname) for m in all_managers])
 
     return _store.get_leaderboard(_manager_store)
 

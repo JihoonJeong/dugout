@@ -33,6 +33,7 @@ class UserPrediction:
     locked: bool = False
     game_type: str = "R"  # "R" = Regular, "S" = Spring Training
     manager_id: str = ""  # 감독 ID (빈 문자열 = 미지정)
+    manager_nickname: str = ""  # 감독 닉네임
 
     # 실제 결과 (나중에 채워짐)
     actual_winner: Optional[str] = None
@@ -107,6 +108,7 @@ class PredictionStore:
         confidence: float | None = None,
         game_type: str = "R",
         manager_id: str = "",
+        manager_nickname: str = "",
     ) -> UserPrediction:
         """예측 제출."""
         predictions = self._load_date(game_date)
@@ -133,6 +135,7 @@ class PredictionStore:
             updated_at=now,
             game_type=game_type,
             manager_id=manager_id,
+            manager_nickname=manager_nickname,
         )
 
         predictions.append(asdict(pred))
@@ -288,12 +291,15 @@ class PredictionStore:
         # 등록된 감독 ID → nickname 매핑
         mgr_map = {mgr.manager_id: mgr.nickname for mgr in managers}
 
-        # 모든 예측에서 고유 manager_id 수집 (빈 문자열 포함)
+        # 모든 예측에서 고유 manager_id 수집 + 닉네임 캐시
         all_manager_ids: set[str] = set()
+        pred_nicknames: dict[str, str] = {}  # manager_id → nickname (예측 데이터에서)
         for date_key in self._all_date_keys():
             for p in self._load_date(date_key):
                 mid = p.get("manager_id", "")
                 all_manager_ids.add(mid)
+                if mid and p.get("manager_nickname"):
+                    pred_nicknames[mid] = p["manager_nickname"]
 
         # 정규시즌 우선, 없으면 시범경기
         regular_any = self.get_cumulative_stats(game_type="R")
@@ -309,7 +315,7 @@ class PredictionStore:
                 stats = self.get_cumulative_stats(manager_id=mid, game_type=None)
             if stats.total_scored < 1:
                 continue
-            nickname = mgr_map.get(mid, "Anonymous" if not mid else mid[:8])
+            nickname = mgr_map.get(mid) or pred_nicknames.get(mid) or ("Anonymous" if not mid else mid[:8])
             leaderboard.append({
                 "manager_id": mid,
                 "nickname": nickname,
