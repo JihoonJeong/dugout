@@ -285,10 +285,6 @@ class PredictionStore:
         """
         managers = manager_store.get_all()
 
-        # 정규시즌 결과가 하나라도 있는지 확인
-        regular_any = self.get_cumulative_stats(game_type="R")
-        use_type = "R" if regular_any.total_scored > 0 else "S"
-
         # 등록된 감독 ID → nickname 매핑
         mgr_map = {mgr.manager_id: mgr.nickname for mgr in managers}
 
@@ -299,12 +295,20 @@ class PredictionStore:
                 mid = p.get("manager_id", "")
                 all_manager_ids.add(mid)
 
+        # 정규시즌 우선, 없으면 시범경기
+        regular_any = self.get_cumulative_stats(game_type="R")
+        season = "R" if regular_any.total_scored > 0 else "S"
+
         leaderboard = []
         for mid in all_manager_ids:
-            stats = self.get_cumulative_stats(manager_id=mid, game_type=use_type)
+            # 정규시즌 우선, 없으면 시범경기, 그래도 없으면 전체
+            stats = self.get_cumulative_stats(manager_id=mid, game_type="R")
+            if stats.total_scored < 1:
+                stats = self.get_cumulative_stats(manager_id=mid, game_type="S")
+            if stats.total_scored < 1:
+                stats = self.get_cumulative_stats(manager_id=mid, game_type=None)
             if stats.total_scored < 1:
                 continue
-            # 닉네임: 등록된 감독이면 닉네임, 아니면 "Anonymous"
             nickname = mgr_map.get(mid, "Anonymous" if not mid else mid[:8])
             leaderboard.append({
                 "manager_id": mid,
@@ -316,7 +320,7 @@ class PredictionStore:
                 "avg_points": stats.avg_points,
                 "total_points": stats.total_points,
                 "exact_scores": stats.exact_scores,
-                "season": use_type,
+                "season": season,
             })
 
         leaderboard.sort(key=lambda x: x["avg_points"], reverse=True)
