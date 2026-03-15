@@ -171,7 +171,7 @@ class ResultCardResponse(BaseModel):
     score_breakdown: Optional[dict] = None
 
 
-class MyStatsResponse(BaseModel):
+class SeasonStats(BaseModel):
     total_predictions: int = 0
     total_scored: int = 0
     wins_correct: int = 0
@@ -186,6 +186,10 @@ class MyStatsResponse(BaseModel):
     engine_correct: int = 0
     engine_total: int = 0
     engine_accuracy: float = 0.0
+
+
+class MyStatsResponse(SeasonStats):
+    spring_training: Optional[SeasonStats] = None
 
 
 # ── Helpers ──────────────────────────────────────────────
@@ -627,23 +631,32 @@ def get_my_stats(manager_id: Optional[str] = Query(None)) -> MyStatsResponse:
     if _store is None:
         raise HTTPException(500, "Daily module not initialized")
 
-    stats = _store.get_cumulative_stats(manager_id=manager_id)
-    return MyStatsResponse(
-        total_predictions=stats.total_predictions,
-        total_scored=stats.total_scored,
-        wins_correct=stats.wins_correct,
-        wins_total=stats.wins_total,
-        win_accuracy=stats.win_accuracy,
-        exact_scores=stats.exact_scores,
-        total_points=stats.total_points,
-        avg_points=stats.avg_points,
-        total_winner_points=stats.total_winner_points,
-        total_score_points=stats.total_score_points,
-        total_calibration_points=stats.total_calibration_points,
-        engine_correct=stats.engine_correct,
-        engine_total=stats.engine_total,
-        engine_accuracy=stats.engine_accuracy,
-    )
+    def _to_season_stats(s) -> dict:
+        return dict(
+            total_predictions=s.total_predictions,
+            total_scored=s.total_scored,
+            wins_correct=s.wins_correct,
+            wins_total=s.wins_total,
+            win_accuracy=s.win_accuracy,
+            exact_scores=s.exact_scores,
+            total_points=s.total_points,
+            avg_points=s.avg_points,
+            total_winner_points=s.total_winner_points,
+            total_score_points=s.total_score_points,
+            total_calibration_points=s.total_calibration_points,
+            engine_correct=s.engine_correct,
+            engine_total=s.engine_total,
+            engine_accuracy=s.engine_accuracy,
+        )
+
+    regular = _store.get_cumulative_stats(manager_id=manager_id, game_type="R")
+    spring = _store.get_cumulative_stats(manager_id=manager_id, game_type="S")
+
+    resp = _to_season_stats(regular)
+    if spring.total_scored > 0:
+        resp["spring_training"] = _to_season_stats(spring)
+
+    return MyStatsResponse(**resp)
 
 
 @router.get("/results/{target_date}")

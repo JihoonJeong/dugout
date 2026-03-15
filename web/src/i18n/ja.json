@@ -84,6 +84,7 @@
     "totalPoints": "合計点",
     "exactScores": "スコア的中",
     "regularOnly": "レギュラーシーズンのみ",
+    "springTraining": "オープン戦",
     "noPredictions": "まだ予想がありません。今日の試合に参加しましょう！"
   },
   "leaderboard": {

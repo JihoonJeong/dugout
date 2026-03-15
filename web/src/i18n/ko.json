@@ -84,6 +84,7 @@
     "totalPoints": "총 점수",
     "exactScores": "정확 스코어",
     "regularOnly": "정규 시즌만 포함",
+    "springTraining": "시범경기",
     "noPredictions": "아직 예측이 없습니다. 오늘의 경기에 참여하세요!"
   },
   "leaderboard": {

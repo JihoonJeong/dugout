@@ -234,22 +234,27 @@ class PredictionStore:
             self._save_date(game_date, predictions)
         return result_breakdown
 
-    def get_cumulative_stats(self, manager_id: str | None = None) -> CumulativeStats:
-        """전체 누적 성적 계산 (정규시즌만).
+    def get_cumulative_stats(
+        self,
+        manager_id: str | None = None,
+        game_type: str | None = "R",
+    ) -> CumulativeStats:
+        """누적 성적 계산.
 
         Args:
             manager_id: 특정 감독의 성적만 조회. None이면 전체.
+            game_type: "R"=정규시즌, "S"=시범경기, None=전체.
         """
         stats = CumulativeStats()
 
         for date_key in sorted(self._all_date_keys()):
             predictions = self._load_date(date_key)
             for p in predictions:
-                # 스프링 트레이닝은 누적 성적에서 제외
-                if p.get("game_type", "R") == "S":
-                    continue
                 # 감독 필터
                 if manager_id is not None and p.get("manager_id", "") != manager_id:
+                    continue
+                # game_type 필터
+                if game_type is not None and p.get("game_type", "R") != game_type:
                     continue
                 stats.total_predictions += 1
                 if p.get("actual_winner") is not None:
@@ -267,19 +272,26 @@ class PredictionStore:
         return stats
 
     def get_leaderboard(self, manager_store) -> list[dict]:
-        """전체 감독 리더보드 (정규시즌만).
+        """전체 감독 리더보드.
+
+        정규시즌 결과가 있으면 정규시즌만, 없으면 시범경기로 표시.
 
         Args:
             manager_store: ManagerStore instance to get manager info.
 
         Returns:
             Sorted list of dicts with manager stats, by avg_points descending.
+            "season" field: "R" or "S".
         """
         managers = manager_store.get_all()
-        leaderboard = []
 
+        # 정규시즌 결과가 하나라도 있는지 확인
+        regular_any = self.get_cumulative_stats(game_type="R")
+        use_type = "R" if regular_any.total_scored > 0 else "S"
+
+        leaderboard = []
         for mgr in managers:
-            stats = self.get_cumulative_stats(manager_id=mgr.manager_id)
+            stats = self.get_cumulative_stats(manager_id=mgr.manager_id, game_type=use_type)
             if stats.total_scored < 1:
                 continue
             leaderboard.append({
@@ -292,6 +304,7 @@ class PredictionStore:
                 "avg_points": stats.avg_points,
                 "total_points": stats.total_points,
                 "exact_scores": stats.exact_scores,
+                "season": use_type,
             })
 
         leaderboard.sort(key=lambda x: x["avg_points"], reverse=True)

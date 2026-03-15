@@ -21,7 +21,13 @@ export default function MyStats({ onClose }) {
     );
   }
 
-  if (!stats || stats.total_predictions === 0) {
+  // 정규시즌 없으면 시범경기를 메인으로
+  const hasRegular = stats && stats.total_scored > 0;
+  const hasSpring = stats && stats.spring_training && stats.spring_training.total_scored > 0;
+  const mainStats = hasRegular ? stats : (hasSpring ? stats.spring_training : null);
+  const isSpringMain = !hasRegular && hasSpring;
+
+  if (!stats || (!hasRegular && !hasSpring && stats.total_predictions === 0)) {
     return (
       <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -35,12 +41,17 @@ export default function MyStats({ onClose }) {
     );
   }
 
-  const s = stats;
+  const s = mainStats;
 
   return (
     <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-white">{t('stats.title')}</h2>
+        <h2 className="text-lg font-bold text-white">
+          {t('stats.title')}
+          {isSpringMain && (
+            <span className="text-xs text-green-400 font-normal ml-2">{t('stats.springTraining')}</span>
+          )}
+        </h2>
         {onClose && (
           <button onClick={onClose} className="text-slate-400 hover:text-white text-sm">✕</button>
         )}
@@ -84,7 +95,7 @@ export default function MyStats({ onClose }) {
 
       {/* vs Engine */}
       {s.engine_total > 0 && (
-        <div className="bg-slate-900/50 rounded-lg p-3">
+        <div className="bg-slate-900/50 rounded-lg p-3 mb-4">
           <div className="text-xs text-slate-400 uppercase tracking-wider mb-2">You vs Engine</div>
           <div className="flex items-center justify-between">
             <div className="text-center">
@@ -103,6 +114,30 @@ export default function MyStats({ onClose }) {
           </div>
         </div>
       )}
+
+      {/* Spring training (separate section when regular season is main) */}
+      {hasRegular && hasSpring && (() => {
+        const sp = stats.spring_training;
+        return (
+          <div className="bg-green-900/20 border border-green-700/30 rounded-lg p-3">
+            <div className="text-xs text-green-400 uppercase tracking-wider mb-2">{t('stats.springTraining')}</div>
+            <div className="flex gap-4 text-center text-sm">
+              <div className="flex-1">
+                <div className="text-white font-bold">{(sp.win_accuracy * 100).toFixed(0)}%</div>
+                <div className="text-xs text-slate-500">{sp.wins_correct}/{sp.wins_total} W</div>
+              </div>
+              <div className="flex-1">
+                <div className="text-white font-bold">{sp.avg_points.toFixed(1)}</div>
+                <div className="text-xs text-slate-500">Avg Pts</div>
+              </div>
+              <div className="flex-1">
+                <div className="text-white font-bold">{sp.total_scored}</div>
+                <div className="text-xs text-slate-500">Games</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

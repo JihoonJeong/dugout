@@ -74,7 +74,7 @@ export default function Leaderboard({ onClose }) {
             </tbody>
           </table>
           <div className="text-xs text-slate-500 mt-2 text-center">
-            {t('stats.regularOnly')}
+            {data[0]?.season === 'S' ? t('stats.springTraining') : t('stats.regularOnly')}
           </div>
         </div>
       )}
