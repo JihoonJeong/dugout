@@ -54,7 +54,10 @@ export default function Leaderboard({ onClose }) {
                     </td>
                     <td className={`py-2 px-2 font-medium ${isMe ? 'text-amber-400' : 'text-white'}`}>
                       {entry.nickname}
-                      {isMe && <span className="text-xs text-amber-500/70 ml-1">(you)</span>}
+                      {entry.manager_id && (
+                        <span className="text-xs text-slate-500 ml-1">({entry.manager_id})</span>
+                      )}
+                      {isMe && <span className="text-xs text-amber-500/70 ml-1">← you</span>}
                     </td>
                     <td className="py-2 px-2 text-right font-mono text-amber-400">
                       {entry.avg_points.toFixed(1)}
