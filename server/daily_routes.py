@@ -716,12 +716,30 @@ def get_leaderboard() -> list[dict]:
     if _store is None or _manager_store is None:
         raise HTTPException(500, "Daily module not initialized")
 
-    all_managers = _manager_store.get_all()
-    logger.info("Leaderboard: %d registered managers: %s",
-                len(all_managers),
-                [(m.manager_id, m.nickname) for m in all_managers])
-
     return _store.get_leaderboard(_manager_store)
+
+
+@router.get("/debug/managers")
+def debug_managers() -> dict:
+    """디버그: 매니저 스토어 + 예측 데이터 상태 확인."""
+    if _store is None or _manager_store is None:
+        raise HTTPException(500, "Not initialized")
+
+    managers = _manager_store.get_all()
+    pred_manager_ids = set()
+    pred_nicknames = {}
+    for dk in _store._all_date_keys():
+        for p in _store._load_date(dk):
+            mid = p.get("manager_id", "")
+            if mid:
+                pred_manager_ids.add(mid)
+                pred_nicknames[mid] = p.get("manager_nickname", "")
+
+    return {
+        "registered_managers": [{"id": m.manager_id, "nickname": m.nickname} for m in managers],
+        "prediction_manager_ids": list(pred_manager_ids),
+        "prediction_nicknames": pred_nicknames,
+    }
 
 
 def _backfill_nicknames() -> None:
