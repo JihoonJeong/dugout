@@ -735,10 +735,16 @@ def debug_managers() -> dict:
                 pred_manager_ids.add(mid)
                 pred_nicknames[mid] = p.get("manager_nickname", "")
 
+    # Redis 직접 확인
+    redis_raw = None
+    if _manager_store._redis:
+        redis_raw = _manager_store._redis.get("managers")
+
     return {
         "registered_managers": [{"id": m.manager_id, "nickname": m.nickname} for m in managers],
         "prediction_manager_ids": list(pred_manager_ids),
         "prediction_nicknames": pred_nicknames,
+        "redis_managers_raw": redis_raw,
     }
 
 
