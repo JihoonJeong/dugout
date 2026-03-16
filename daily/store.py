@@ -315,7 +315,14 @@ class PredictionStore:
                 stats = self.get_cumulative_stats(manager_id=mid, game_type=None)
             if stats.total_scored < 1:
                 continue
-            nickname = mgr_map.get(mid) or pred_nicknames.get(mid) or ("Anonymous" if not mid else mid[:8])
+            nickname = mgr_map.get(mid) or pred_nicknames.get(mid)
+            if not nickname and mid:
+                # 개별 조회 시도
+                mgr = manager_store.get(mid)
+                if mgr:
+                    nickname = mgr.nickname
+            if not nickname:
+                nickname = "Anonymous" if not mid else mid[:8]
             leaderboard.append({
                 "manager_id": mid,
                 "nickname": nickname,

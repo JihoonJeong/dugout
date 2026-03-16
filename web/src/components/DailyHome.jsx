@@ -29,11 +29,13 @@ const LEAGUE_IDS = ['all', 'mlb', 'kbo', 'npb'];
 
 export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   const { t, lang, setLang } = useLanguage();
-  const [tab, setTab] = useState('today');
+  const [showToday, setShowToday] = useState(true);
+  const [showResults, setShowResults] = useState(false);
   const [league, setLeague] = useState('all');
   const [games, setGames] = useState([]);
   const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingGames, setLoadingGames] = useState(true);
+  const [loadingResults, setLoadingResults] = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
   const [showStats, setShowStats] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -41,29 +43,46 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   const managerName = getManagerNickname();
 
   useEffect(() => {
-    loadData();
-  }, [tab]);
+    loadGames();
+  }, []);
+
+  useEffect(() => {
+    if (showResults && results.length === 0 && !loadingResults) {
+      loadResults();
+    }
+  }, [showResults]);
+
+  async function loadGames() {
+    setLoadingGames(true);
+    try {
+      const data = await getDailyGames();
+      setGames(data);
+    } catch (e) {
+      console.error('Failed to load games:', e);
+    }
+    setLoadingGames(false);
+  }
+
+  async function loadResults() {
+    setLoadingResults(true);
+    try {
+      const data = await getYesterdayResults();
+      setResults(data);
+    } catch (e) {
+      console.error('Failed to load results:', e);
+    }
+    setLoadingResults(false);
+  }
 
   async function loadData() {
-    setLoading(true);
-    try {
-      if (tab === 'today') {
-        const data = await getDailyGames();
-        setGames(data);
-      } else {
-        const data = await getYesterdayResults();
-        setResults(data);
-      }
-    } catch (e) {
-      console.error('Failed to load:', e);
-    }
-    setLoading(false);
+    loadGames();
+    if (showResults) loadResults();
   }
 
   const filteredGames = league === 'all' ? games : games.filter(g => (g.league_id || 'mlb') === league);
   const filteredResults = league === 'all' ? results : results.filter(r => (r.league_id || 'mlb') === league);
 
-  const sourceList = tab === 'today' ? games : results;
+  const sourceList = [...games, ...results];
   const leagueCounts = {};
   for (const item of sourceList) {
     const lid = item.league_id || 'mlb';
@@ -148,48 +167,26 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
             })}
           </div>
 
-          {/* Day tabs */}
+          {/* Section toggles */}
           <div className="flex gap-1 bg-slate-900/50 rounded-lg p-1">
-            <button
-              onClick={() => setTab('today')}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                tab === 'today'
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {t('nav.todayGames')}
-            </button>
-            <button
-              onClick={() => setTab('results')}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                tab === 'results'
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {t('nav.yesterday')}
-            </button>
-            <button
-              onClick={() => setShowStats(s => !s)}
-              className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                showStats
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {t('nav.stats')}
-            </button>
-            <button
-              onClick={() => setShowLeaderboard(s => !s)}
-              className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                showLeaderboard
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {t('nav.ranks')}
-            </button>
+            {[
+              { key: 'today', label: t('nav.todayGames'), active: showToday, toggle: () => setShowToday(s => !s) },
+              { key: 'results', label: t('nav.yesterday'), active: showResults, toggle: () => setShowResults(s => !s) },
+              { key: 'stats', label: t('nav.stats'), active: showStats, toggle: () => setShowStats(s => !s) },
+              { key: 'ranks', label: t('nav.ranks'), active: showLeaderboard, toggle: () => setShowLeaderboard(s => !s) },
+            ].map(btn => (
+              <button
+                key={btn.key}
+                onClick={btn.toggle}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                  btn.active
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {btn.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -214,22 +211,22 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
           </div>
         )}
 
-        {loading ? (
-          <div className="text-center py-12 text-slate-400">
-            <div className="text-lg mb-2">{t('daily.loadingSchedule')}</div>
-            <div className="text-sm text-slate-500 mt-3 max-w-sm mx-auto leading-relaxed">
-              {t('app.beta')}
+        {showToday && (
+          loadingGames ? (
+            <div className="text-center py-12 text-slate-400 mb-6">
+              <div className="text-lg mb-2">{t('daily.loadingSchedule')}</div>
+              <div className="text-sm text-slate-500 mt-3 max-w-sm mx-auto leading-relaxed">
+                {t('app.beta')}
+              </div>
             </div>
-          </div>
-        ) : tab === 'today' ? (
-          filteredGames.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
+          ) : filteredGames.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 mb-6">
               {league !== 'all'
                 ? t('daily.noGamesLeague', { league: league.toUpperCase() })
                 : t('daily.noGames')}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 mb-6">
               <div className="text-sm text-slate-400 mb-2">
                 {t('daily.gamesCount', { count: filteredGames.length })}
                 {filteredGames.some(g => g.game_type === 'S') && (
@@ -248,20 +245,33 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
               ))}
             </div>
           )
-        ) : (
-          filteredResults.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
+        )}
+
+        {showResults && (
+          loadingResults ? (
+            <div className="text-center py-8 text-slate-400 mb-6">Loading results...</div>
+          ) : filteredResults.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 mb-6">
               {league !== 'all'
                 ? t('daily.noResultsLeague', { league: league.toUpperCase() })
                 : t('daily.noResults')}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 mb-6">
+              <div className="text-sm text-slate-400 mb-2">
+                {t('nav.yesterday')}
+              </div>
               {filteredResults.map(r => (
                 <ResultCard key={`${r.league_id || 'mlb'}-${r.game_id}`} result={r} teamNames={TEAM_NAMES} />
               ))}
             </div>
           )
+        )}
+
+        {!showToday && !showResults && !showStats && !showLeaderboard && (
+          <div className="text-center py-12 text-slate-500 text-sm">
+            Select a section above
+          </div>
         )}
       </div>
     </div>

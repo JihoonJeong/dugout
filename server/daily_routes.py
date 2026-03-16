@@ -498,7 +498,7 @@ def submit_prediction(req: PredictionRequest) -> dict:
             confidence=req.confidence,
             game_type=game.game_type,
             manager_id=req.manager_id or "",
-            manager_nickname=req.manager_nickname or "",
+            manager_nickname=_resolve_nickname(req.manager_id),
         )
         return {"status": "submitted", "prediction": asdict(pred)}
     except ValueError as e:
@@ -718,6 +718,14 @@ def get_leaderboard() -> list[dict]:
                 [(m.manager_id, m.nickname) for m in all_managers])
 
     return _store.get_leaderboard(_manager_store)
+
+
+def _resolve_nickname(manager_id: str | None) -> str:
+    """manager_id로 닉네임 조회. 없으면 빈 문자열."""
+    if not manager_id or not _manager_store:
+        return ""
+    mgr = _manager_store.get(manager_id)
+    return mgr.nickname if mgr else ""
 
 
 def _is_locked(game: DailyGame) -> bool:
