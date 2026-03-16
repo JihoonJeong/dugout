@@ -47,7 +47,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   }, []);
 
   useEffect(() => {
-    if (showResults && results.length === 0 && !loadingResults) {
+    if (showResults && results.length === 0 && !loadingGamesResults) {
       loadResults();
     }
   }, [showResults]);
@@ -151,7 +151,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                 <button
                   key={lid}
                   onClick={() => setLeague(lid)}
-                  disabled={!hasGames && !loading}
+                  disabled={!hasGames && !loadingGames}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold tracking-wider transition-colors ${
                     isActive
                       ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
@@ -161,7 +161,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
                   }`}
                 >
                   {t(`leagues.${lid}`)}
-                  {!loading && count > 0 && <span className="ml-1 text-slate-500 font-normal">{count}</span>}
+                  {!loadingGames && count > 0 && <span className="ml-1 text-slate-500 font-normal">{count}</span>}
                 </button>
               );
             })}
