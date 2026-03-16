@@ -66,6 +66,10 @@ def init_daily(data: DugoutData) -> None:
     _predictor = MultiLeaguePredictor(data, kbo_data, npb_data)
     _store = PredictionStore()
     _manager_store = ManagerStore()
+
+    # 기존 예측에 닉네임 채우기 (1회성 마이그레이션)
+    _backfill_nicknames()
+
     logger.info("Daily prediction module initialized (MLB + KBO + NPB)")
 
 
@@ -718,6 +722,25 @@ def get_leaderboard() -> list[dict]:
                 [(m.manager_id, m.nickname) for m in all_managers])
 
     return _store.get_leaderboard(_manager_store)
+
+
+def _backfill_nicknames() -> None:
+    """기존 예측에 manager_nickname이 빠진 경우 채우기."""
+    if not _store or not _manager_store:
+        return
+    for date_key in _store._all_date_keys():
+        predictions = _store._load_date(date_key)
+        changed = False
+        for p in predictions:
+            mid = p.get("manager_id", "")
+            if mid and not p.get("manager_nickname"):
+                mgr = _manager_store.get(mid)
+                if mgr:
+                    p["manager_nickname"] = mgr.nickname
+                    changed = True
+        if changed:
+            _store._save_date(date_key, predictions)
+            logger.info("Backfilled nicknames for %s", date_key)
 
 
 def _resolve_nickname(manager_id: str | None) -> str:
