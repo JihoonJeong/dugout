@@ -719,6 +719,22 @@ def get_leaderboard() -> list[dict]:
     return _store.get_leaderboard(_manager_store)
 
 
+@router.post("/debug/fix-manager-id")
+def fix_manager_id(old_id: str = Query(...), new_id: str = Query(...)) -> dict:
+    """매니저 ID 수정 (1회용 픽스)."""
+    if _manager_store is None:
+        raise HTTPException(500, "Not initialized")
+    managers = _manager_store._load()
+    changed = False
+    for m in managers:
+        if m["manager_id"] == old_id:
+            m["manager_id"] = new_id
+            changed = True
+    if changed:
+        _manager_store._save(managers)
+    return {"changed": changed, "managers": managers}
+
+
 @router.get("/debug/managers")
 def debug_managers() -> dict:
     """디버그: 매니저 스토어 + 예측 데이터 상태 확인."""
