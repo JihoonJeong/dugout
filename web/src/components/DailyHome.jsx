@@ -47,7 +47,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   }, []);
 
   useEffect(() => {
-    if (showResults && results.length === 0 && !loadingGamesResults) {
+    if (showResults && results.length === 0 && !loadingResults) {
       loadResults();
     }
   }, [showResults]);
