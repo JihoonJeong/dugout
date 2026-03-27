@@ -1,7 +1,7 @@
 """NPB 일일 경기 데이터 수집 파이프라인.
 
-NPB 공식 사이트(npb.jp)에서 월간 상세 스케줄 페이지를 파싱합니다.
-URL: https://npb.jp/games/{year}/schedule_{month:02d}_detail.html
+스케줄: NPB.jp 월간 상세 스케줄 페이지 (시간, 선발투수 등)
+결과/점수: Yahoo Japan Baseball (날짜별 조회, 즉시 업데이트)
 """
 
 from __future__ import annotations
@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 _JST = timezone(timedelta(hours=9))
 
+_YAHOO_SCHEDULE_URL = "https://baseball.yahoo.co.jp/npb/schedule/?date={date}"
+
+_NPB_SCHEDULE_URL = "https://npb.jp/games/{year}/schedule_{month:02d}_detail.html"
+
 # NPB team name mapping (HTML上の表記 → our team_id)
 _NPB_TEAM_ALIAS = {
     "巨人": "巨人", "ヤクルト": "ヤクルト", "DeNA": "DeNA",
@@ -40,32 +44,28 @@ _NPB_VENUE = {
     "ロッテ": "ZOZOマリンスタジアム", "日本ハム": "エスコンフィールドHOKKAIDO",
 }
 
-_NPB_SCHEDULE_URL = "https://npb.jp/games/{year}/schedule_{month:02d}_detail.html"
-
-# NPB 공식 사이트 헤더 score ticker에서 사용하는 정식 팀명 → team_id
-_NPB_FULLNAME_TO_ID = {
-    "読売ジャイアンツ": "巨人",
-    "阪神タイガース": "阪神",
-    "中日ドラゴンズ": "中日",
-    "横浜DeNAベイスターズ": "DeNA",
-    "広島東洋カープ": "広島",
-    "東京ヤクルトスワローズ": "ヤクルト",
-    "オリックス・バファローズ": "オリックス",
-    "福岡ソフトバンクホークス": "ソフトバンク",
-    "埼玉西武ライオンズ": "西武",
-    "東北楽天ゴールデンイーグルス": "楽天",
-    "千葉ロッテマリーンズ": "ロッテ",
-    "北海道日本ハムファイターズ": "日本ハム",
+_HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Accept-Language": "ja-JP,ja;q=0.9",
 }
 
 
+def _game_type(target_date: date) -> str:
+    """Regular vs pre-season (オープン戦 before late March)."""
+    if target_date.month < 3 or (target_date.month == 3 and target_date.day < 25):
+        return "S"
+    return "R"
+
+
 class NPBPipeline(DailyPipeline):
-    """NPB.jp 공식 사이트에서 일일 경기 데이터 수집."""
+    """NPB 일일 경기 데이터 수집 — NPB.jp(스케줄) + Yahoo(결과)."""
 
     def __init__(self, cache_dir: str = "cache/daily/"):
         super().__init__(NPB, cache_dir)
         self._cache_dir = Path(cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── fetch_games ─────────────────────────────────────────
 
     def fetch_games(self, target_date: date | None = None) -> list[DailyGame]:
         if target_date is None:
@@ -79,18 +79,20 @@ class NPBPipeline(DailyPipeline):
             with open(cache_path) as f:
                 return [DailyGame(**g) for g in json.load(f)]
 
+        # NPB.jp에서 스케줄 (시간, 구장 등)
         games = self._fetch_from_npb_jp(target_date)
 
-        # 스케줄 페이지에 점수가 없더라도, 헤더 ticker에서 최신 결과를 반영
-        header_results = self._fetch_results_from_header(target_date)
-        if header_results:
-            score_map = {r.game_id: r for r in header_results}
+        # Yahoo에서 점수/status 업데이트
+        yahoo_scores = self._fetch_from_yahoo(target_date)
+        if yahoo_scores:
+            score_map = {(s["team1"], s["team2"]): s for s in yahoo_scores}
             for g in games:
-                r = score_map.get(g.game_id)
-                if r and g.status == "Scheduled":
+                key = (g.away_team_id, g.home_team_id)
+                s = score_map.get(key)
+                if s and s["finished"] and g.status == "Scheduled":
                     g.status = "Final"
-                    g.away_score = r.away_score
-                    g.home_score = r.home_score
+                    g.away_score = s["score1"]
+                    g.home_score = s["score2"]
 
         logger.info("Found %d NPB games for %s", len(games), date_str)
 
@@ -98,6 +100,8 @@ class NPBPipeline(DailyPipeline):
             json.dump([asdict(g) for g in games], f, indent=2, ensure_ascii=False)
 
         return games
+
+    # ── fetch_results ───────────────────────────────────────
 
     def fetch_results(self, target_date: date | None = None) -> list[DailyResult]:
         if target_date is None:
@@ -111,55 +115,28 @@ class NPBPipeline(DailyPipeline):
             with open(cache_path) as f:
                 return [DailyResult(**r) for r in json.load(f)]
 
-        # 1) 헤더 score ticker에서 결과 시도 (빠르고 최신)
-        results = self._fetch_results_from_header(target_date)
+        # 1) Yahoo Japan — 날짜별 조회, 항상 신뢰 가능
+        results = self._build_results_from_yahoo(target_date)
 
-        # 2) 헤더에 없으면 월간 스케줄 페이지 폴백
+        # 2) 폴백: games 캐시에서 Final 경기 추출
         if not results:
-            logger.info("Header had no results for %s, falling back to schedule page", date_str)
-            games = self._fetch_from_npb_jp(target_date)
-            for g in games:
-                if g.away_score is None or g.home_score is None:
-                    continue
-                winner = "away" if g.away_score > g.home_score else "home"
-                results.append(DailyResult(
-                    game_id=g.game_id,
-                    league_id="npb",
-                    game_date=g.game_date,
-                    away_team_id=g.away_team_id,
-                    home_team_id=g.home_team_id,
-                    away_score=g.away_score,
-                    home_score=g.home_score,
-                    winner=winner,
-                    away_starter_name=g.away_starter_name,
-                    home_starter_name=g.home_starter_name,
-                    game_type=g.game_type,
-                ))
+            results = self._build_results_from_games_cache(target_date)
 
-        # 3) 그래도 없으면 games 캐시에서 Final 상태 경기 추출
-        #    (fetch_games가 헤더에서 점수를 반영해 캐시한 경우)
+        # 3) 최후 폴백: NPB.jp 스케줄 페이지 (점수 반영이 느림)
         if not results:
-            games_cache = self._cache_dir / f"npb_games_{date_str}.json"
-            if games_cache.exists():
-                logger.info("Extracting results from games cache: %s", games_cache)
-                with open(games_cache) as f:
-                    cached_games = json.load(f)
-                for g in cached_games:
-                    if g.get("status") != "Final" or g.get("away_score") is None:
-                        continue
-                    winner = "away" if g["away_score"] > g["home_score"] else "home"
+            logger.info("All sources failed for %s, trying NPB.jp schedule", date_str)
+            for g in self._fetch_from_npb_jp(target_date):
+                if g.away_score is not None and g.home_score is not None:
+                    winner = "away" if g.away_score > g.home_score else "home"
                     results.append(DailyResult(
-                        game_id=g["game_id"],
-                        league_id="npb",
-                        game_date=g["game_date"],
-                        away_team_id=g["away_team_id"],
-                        home_team_id=g["home_team_id"],
-                        away_score=g["away_score"],
-                        home_score=g["home_score"],
+                        game_id=g.game_id, league_id="npb",
+                        game_date=g.game_date,
+                        away_team_id=g.away_team_id, home_team_id=g.home_team_id,
+                        away_score=g.away_score, home_score=g.home_score,
                         winner=winner,
-                        away_starter_name=g.get("away_starter_name", ""),
-                        home_starter_name=g.get("home_starter_name", ""),
-                        game_type=g.get("game_type", "R"),
+                        away_starter_name=g.away_starter_name,
+                        home_starter_name=g.home_starter_name,
+                        game_type=g.game_type,
                     ))
 
         logger.info("Found %d NPB results for %s", len(results), date_str)
@@ -170,131 +147,130 @@ class NPBPipeline(DailyPipeline):
 
         return results
 
-    def _fetch_results_from_header(self, target_date: date) -> list[DailyResult]:
-        """NPB.jp 헤더 score ticker에서 경기 결과 추출.
+    # ── Yahoo Japan ─────────────────────────────────────────
 
-        헤더는 항상 가장 최근 경기일의 결과를 보여줌.
-        target_date와 일치할 때만 결과를 반환.
+    def _fetch_from_yahoo(self, target_date: date) -> list[dict] | None:
+        """Yahoo Japan Baseball 스케줄 페이지에서 경기 점수 파싱.
+
+        Returns list of dicts: {team1, team2, score1, score2, finished, venue}
+        team1/team2 순서는 NPB.jp의 team1/team2와 동일 (homeLogo=team1).
         """
-        url = "https://npb.jp/"
+        url = _YAHOO_SCHEDULE_URL.format(date=target_date.isoformat())
         try:
-            resp = httpx.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-                    "Accept-Language": "ja-JP,ja;q=0.9",
-                },
-                timeout=15,
-                follow_redirects=True,
-            )
+            resp = httpx.get(url, headers=_HTTP_HEADERS, timeout=15, follow_redirects=True)
             resp.raise_for_status()
         except httpx.HTTPError as e:
-            logger.warning("NPB.jp header fetch failed: %s", e)
-            return []
+            logger.warning("Yahoo Japan fetch failed: %s", e)
+            return None
 
-        return self._parse_header_scores(resp.text, target_date)
+        return self._parse_yahoo_html(resp.text)
 
-    def _parse_header_scores(self, html: str, target_date: date) -> list[DailyResult]:
-        """NPB.jp 헤더 score ticker HTML 파싱.
+    def _parse_yahoo_html(self, html: str) -> list[dict]:
+        """Yahoo Japan Baseball 스케줄 페이지 HTML 파싱.
 
-        Structure:
-            <div id="header_score">
-              <div class="score_box date"><div>2026<br>3/27 Fri.</div></div>
-              <div class="score_box">
-                <a href="/scores/2026/0327/g-t-01/">
-                  <img alt="読売ジャイアンツ" class="logo_left">
-                  <img alt="阪神タイガース" class="logo_right">
-                  <div class="score">3-1</div>
-                  <div class="state">（東京ドーム）試合終了</div>
-                </a>
-              </div>
-              ...
+        Structure per game:
+            <p class="bb-score__homeLogo ...">巨人</p>
+            <p class="bb-score__awayLogo ...">阪神</p>
+            <span class="bb-score__score bb-score__score--left">3</span>
+            <span class="bb-score__score bb-score__score--center">-</span>
+            <span class="bb-score__score bb-score__score--right">1</span>
+
+        Note: Yahoo's homeLogo = NPB.jp team1 (our away_team_id in game_id).
         """
-        header = re.search(r'id="header_score"(.*?)</header>', html, re.DOTALL)
-        if not header:
-            logger.warning("NPB header_score section not found")
-            return []
-
-        header_html = header.group(1)
-
-        # 날짜 확인: "2026<br>3/27 Fri." → month=3, day=27
-        date_m = re.search(r'score_box date.*?(\d{4})<br>\s*(\d{1,2})/(\d{1,2})', header_html, re.DOTALL)
-        if not date_m:
-            logger.warning("Could not parse date from NPB header")
-            return []
-
-        header_year = int(date_m.group(1))
-        header_month = int(date_m.group(2))
-        header_day = int(date_m.group(3))
-        header_date = date(header_year, header_month, header_day)
-
-        if header_date != target_date:
-            logger.info("NPB header date %s != target %s", header_date, target_date)
-            return []
-
-        # game_type 판정
-        game_type = "R"
-        if target_date.month < 3 or (target_date.month == 3 and target_date.day < 25):
-            game_type = "S"
-
-        # 각 경기 파싱
-        game_pattern = re.compile(
-            r'<div class="score_box">\s*<a href="(/scores/[^"]+)".*?'
-            r'alt="([^"]+)".*?alt="([^"]+)".*?'
-            r'class="score">([\d]+-[\d]+)</div>.*?'
-            r'class="state">(.*?)</div>',
-            re.DOTALL,
-        )
-
         results = []
-        for m in game_pattern.finditer(header_html):
-            link, away_full, home_full, score_str, state_raw = m.groups()
-            state = re.sub(r'<.*?>', '', state_raw).strip()
 
-            if "試合終了" not in state:
-                continue  # 아직 진행 중이거나 미시작
+        # Split by game items
+        blocks = re.split(r'bb-score__item', html)[1:]
 
-            away_id = _NPB_FULLNAME_TO_ID.get(away_full)
-            home_id = _NPB_FULLNAME_TO_ID.get(home_full)
-            if not away_id or not home_id:
-                logger.debug("Unknown NPB team in header: %s or %s", away_full, home_full)
+        for block in blocks:
+            home_m = re.search(r'homeLogo[^>]*>([^<]+)', block)
+            away_m = re.search(r'awayLogo[^>]*>([^<]+)', block)
+            if not home_m or not away_m:
                 continue
 
-            parts = score_str.split("-")
-            away_score = int(parts[0])
-            home_score = int(parts[1])
-            winner = "away" if away_score > home_score else "home"
+            # Yahoo homeLogo = NPB team1 = our "away" in game_id convention
+            team1 = _NPB_TEAM_ALIAS.get(home_m.group(1).strip())
+            team2 = _NPB_TEAM_ALIAS.get(away_m.group(1).strip())
+            if not team1 or not team2:
+                continue
 
-            game_id = f"npb_{target_date.isoformat()}_{away_id}_{home_id}"
+            venue_m = re.search(r'venue">([^<]+)', block)
+            venue = venue_m.group(1).strip() if venue_m else ""
 
+            sl = re.search(r'score--left[^>]*>(\d+)', block)
+            sr = re.search(r'score--right[^>]*>(\d+)', block)
+            finished = sl is not None and sr is not None
+
+            results.append({
+                "team1": team1,
+                "team2": team2,
+                "score1": int(sl.group(1)) if sl else None,
+                "score2": int(sr.group(1)) if sr else None,
+                "finished": finished,
+                "venue": venue,
+            })
+
+        return results
+
+    def _build_results_from_yahoo(self, target_date: date) -> list[DailyResult]:
+        """Yahoo 데이터로 DailyResult 리스트 생성."""
+        yahoo = self._fetch_from_yahoo(target_date)
+        if not yahoo:
+            return []
+
+        gt = _game_type(target_date)
+        results = []
+        for s in yahoo:
+            if not s["finished"]:
+                continue
+            game_id = f"npb_{target_date.isoformat()}_{s['team1']}_{s['team2']}"
+            winner = "away" if s["score1"] > s["score2"] else "home"
             results.append(DailyResult(
                 game_id=game_id,
                 league_id="npb",
                 game_date=target_date.isoformat(),
-                away_team_id=away_id,
-                home_team_id=home_id,
-                away_score=away_score,
-                home_score=home_score,
+                away_team_id=s["team1"],
+                home_team_id=s["team2"],
+                away_score=s["score1"],
+                home_score=s["score2"],
                 winner=winner,
-                game_type=game_type,
+                game_type=gt,
             ))
-
         return results
+
+    def _build_results_from_games_cache(self, target_date: date) -> list[DailyResult]:
+        """Games 캐시에서 Final 경기를 결과로 변환."""
+        cache_path = self._cache_dir / f"npb_games_{target_date.isoformat()}.json"
+        if not cache_path.exists():
+            return []
+
+        logger.info("Extracting results from games cache: %s", cache_path)
+        results = []
+        with open(cache_path) as f:
+            for g in json.load(f):
+                if g.get("status") != "Final" or g.get("away_score") is None:
+                    continue
+                winner = "away" if g["away_score"] > g["home_score"] else "home"
+                results.append(DailyResult(
+                    game_id=g["game_id"], league_id="npb",
+                    game_date=g["game_date"],
+                    away_team_id=g["away_team_id"], home_team_id=g["home_team_id"],
+                    away_score=g["away_score"], home_score=g["home_score"],
+                    winner=winner,
+                    away_starter_name=g.get("away_starter_name", ""),
+                    home_starter_name=g.get("home_starter_name", ""),
+                    game_type=g.get("game_type", "R"),
+                ))
+        return results
+
+    # ── NPB.jp (스케줄 전용) ────────────────────────────────
 
     def _fetch_from_npb_jp(self, target_date: date) -> list[DailyGame]:
         """NPB.jp 월간 상세 스케줄 페이지에서 특정 날짜 경기를 추출."""
         url = _NPB_SCHEDULE_URL.format(year=target_date.year, month=target_date.month)
 
         try:
-            resp = httpx.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-                    "Accept-Language": "ja-JP,ja;q=0.9",
-                },
-                timeout=15,
-                follow_redirects=True,
-            )
+            resp = httpx.get(url, headers=_HTTP_HEADERS, timeout=15, follow_redirects=True)
             resp.raise_for_status()
         except httpx.HTTPError as e:
             logger.warning("NPB.jp request failed: %s", e)
@@ -303,90 +279,50 @@ class NPBPipeline(DailyPipeline):
         return self._parse_schedule_html(resp.text, target_date)
 
     def _parse_schedule_html(self, html: str, target_date: date) -> list[DailyGame]:
-        """NPB.jp 월간 상세 스케줄 HTML 파싱.
-
-        Structure per game row:
-            <tr id="dateMMDD">
-              <td>
-                <div class="team1">Away Team</div>
-                <a href="/scores/...">
-                  <div class="score1">N</div>
-                  <div class="state">-</div>
-                  <div class="score2">N</div>
-                </a>
-                <div class="team2">Home Team</div>
-              </td>
-              <td>
-                <div class="place">Venue</div>
-                <div class="time">HH:MM</div>
-              </td>
-            </tr>
-        """
+        """NPB.jp 월간 상세 스케줄 HTML 파싱."""
         games = []
         day = target_date.day
         month = target_date.month
         date_id = f"date{month:02d}{day:02d}"
+        gt = _game_type(target_date)
 
-        # Find all rows for this date
-        # Rows have id="dateMMDD" — first row for a date may also have the date header
         row_pattern = re.compile(
             rf'<tr[^>]*id="{date_id}"[^>]*>(.*?)</tr>',
             re.DOTALL
         )
 
-        for i, match in enumerate(row_pattern.finditer(html)):
+        for match in row_pattern.finditer(html):
             row_html = match.group(1)
 
-            # Extract team names
             team1_m = re.search(r'<div class="team1">\s*(.+?)\s*</div>', row_html)
             team2_m = re.search(r'<div class="team2">\s*(.+?)\s*</div>', row_html)
             if not team1_m or not team2_m:
                 continue
 
-            away_name = team1_m.group(1).strip()
-            home_name = team2_m.group(1).strip()
-
-            away_id = _NPB_TEAM_ALIAS.get(away_name)
-            home_id = _NPB_TEAM_ALIAS.get(home_name)
+            away_id = _NPB_TEAM_ALIAS.get(team1_m.group(1).strip())
+            home_id = _NPB_TEAM_ALIAS.get(team2_m.group(1).strip())
             if not away_id or not home_id:
-                logger.debug("Unknown NPB team: %s or %s", away_name, home_name)
                 continue
 
-            # Extract scores (if game is finished)
             score1_m = re.search(r'<div class="score1">\s*(\d+)\s*</div>', row_html)
             score2_m = re.search(r'<div class="score2">\s*(\d+)\s*</div>', row_html)
             away_score = int(score1_m.group(1)) if score1_m else None
             home_score = int(score2_m.group(1)) if score2_m else None
 
-            # Extract venue and time
             place_m = re.search(r'<div class="place">\s*(.+?)\s*</div>', row_html)
             time_m = re.search(r'<div class="time">\s*(\d+:\d+)\s*</div>', row_html)
-
-            venue_text = place_m.group(1).strip() if place_m else ""
             game_time = time_m.group(1) if time_m else "18:00"
+            venue = _NPB_VENUE.get(home_id, place_m.group(1).strip() if place_m else "")
 
-            # Use home team's venue if available, otherwise use page text
-            venue = _NPB_VENUE.get(home_id, venue_text)
-
-            # Determine game type (regular vs open-sen/pre-season)
-            game_type = "R"
-            # Open-sen (オープン戦) games are typically before late March
-            if target_date.month < 3 or (target_date.month == 3 and target_date.day < 25):
-                game_type = "S"
-
-            # Build UTC from JST
             try:
                 h, m = int(game_time[:2]), int(game_time[3:5])
                 jst_dt = datetime(target_date.year, target_date.month, target_date.day, h, m, tzinfo=_JST)
-                utc_dt = jst_dt.astimezone(timezone.utc)
-                game_datetime_utc = utc_dt.isoformat().replace("+00:00", "Z")
+                game_datetime_utc = jst_dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
             except (ValueError, IndexError):
                 game_datetime_utc = ""
 
-            game_id = f"npb_{target_date.isoformat()}_{away_id}_{home_id}"
-
             games.append(DailyGame(
-                game_id=game_id,
+                game_id=f"npb_{target_date.isoformat()}_{away_id}_{home_id}",
                 league_id="npb",
                 game_date=target_date.isoformat(),
                 game_time=game_time,
@@ -396,7 +332,7 @@ class NPBPipeline(DailyPipeline):
                 status="Scheduled" if away_score is None else "Final",
                 away_score=away_score,
                 home_score=home_score,
-                game_type=game_type,
+                game_type=gt,
                 game_datetime_utc=game_datetime_utc,
             ))
 
