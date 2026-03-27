@@ -136,6 +136,32 @@ class NPBPipeline(DailyPipeline):
                     game_type=g.game_type,
                 ))
 
+        # 3) 그래도 없으면 games 캐시에서 Final 상태 경기 추출
+        #    (fetch_games가 헤더에서 점수를 반영해 캐시한 경우)
+        if not results:
+            games_cache = self._cache_dir / f"npb_games_{date_str}.json"
+            if games_cache.exists():
+                logger.info("Extracting results from games cache: %s", games_cache)
+                with open(games_cache) as f:
+                    cached_games = json.load(f)
+                for g in cached_games:
+                    if g.get("status") != "Final" or g.get("away_score") is None:
+                        continue
+                    winner = "away" if g["away_score"] > g["home_score"] else "home"
+                    results.append(DailyResult(
+                        game_id=g["game_id"],
+                        league_id="npb",
+                        game_date=g["game_date"],
+                        away_team_id=g["away_team_id"],
+                        home_team_id=g["home_team_id"],
+                        away_score=g["away_score"],
+                        home_score=g["home_score"],
+                        winner=winner,
+                        away_starter_name=g.get("away_starter_name", ""),
+                        home_starter_name=g.get("home_starter_name", ""),
+                        game_type=g.get("game_type", "R"),
+                    ))
+
         logger.info("Found %d NPB results for %s", len(results), date_str)
 
         if results:
