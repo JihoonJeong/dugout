@@ -343,22 +343,27 @@ def get_today_games(
         raise HTTPException(500, "Daily module not initialized")
 
     user_now_utc = datetime.now(timezone.utc)
-    user_tz_name = tz or "America/New_York"
-    today_str = _user_local_date(user_now_utc, user_tz_name).isoformat()
     games = _fetch_games_per_league(user_now_utc)
 
     if not games:
         return []
 
-    # 캐시된 예측이 있으면 포함, 없으면 예측 없이 반환
-    pred_map = {}
-    if today_str in _prediction_cache:
-        pred_map = {p.game_id: p for p in _prediction_cache[today_str]}
+    # 게임들의 실제 날짜를 기준으로 예측/캐시를 로드 (유저 TZ와 리그 TZ가 다를 수 있음)
+    game_dates = {g.game_date for g in games}
 
-    all_user_preds = _store.get_by_date(today_str)
-    if manager_id is not None:
-        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
-    user_preds = {p.game_id: p for p in all_user_preds}
+    pred_map = {}
+    for gd in game_dates:
+        if gd in _prediction_cache:
+            for p in _prediction_cache[gd]:
+                pred_map[p.game_id] = p
+
+    user_preds: dict = {}
+    for gd in game_dates:
+        preds = _store.get_by_date(gd)
+        if manager_id is not None:
+            preds = [p for p in preds if p.manager_id == manager_id]
+        for p in preds:
+            user_preds[p.game_id] = p
 
     return [_build_game_card(game, pred_map.get(game.game_id), user_preds.get(game.game_id)) for game in games]
 
@@ -539,19 +544,17 @@ def get_yesterday_results(
         raise HTTPException(500, "Daily module not initialized")
 
     user_now_utc = datetime.now(timezone.utc)
-    user_tz_name = tz or "America/New_York"
-    yesterday_str = (_user_local_date(user_now_utc, user_tz_name) - timedelta(days=1)).isoformat()
 
     results = _fetch_results_per_league(user_now_utc)
-    all_user_preds = _store.get_by_date(yesterday_str)
-    if manager_id is not None:
-        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
-    user_preds = {p.game_id: p for p in all_user_preds}
 
-    # 캐시된 엔진 예측
-    engine_preds = {}
-    if yesterday_str in _prediction_cache:
-        engine_preds = {p.game_id: p for p in _prediction_cache[yesterday_str]}
+    # 결과 데이터의 실제 game_date들을 기준으로 예측/캐시 로드 (유저 TZ 불일치 방지)
+    result_dates = {r.game_date for r in results}
+
+    engine_preds: dict = {}
+    for gd in result_dates:
+        if gd in _prediction_cache:
+            for p in _prediction_cache[gd]:
+                engine_preds[p.game_id] = p
 
     # 실제 결과 기록 + 채점
     for r in results:
@@ -565,11 +568,14 @@ def get_yesterday_results(
             engine_win_pct=ep.final_away_win_pct if ep else None,
         )
 
-    # reload after scoring
-    all_user_preds = _store.get_by_date(yesterday_str)
-    if manager_id is not None:
-        all_user_preds = [p for p in all_user_preds if p.manager_id == manager_id]
-    user_preds = {p.game_id: p for p in all_user_preds}
+    # reload after scoring — 게임 날짜 기준으로 로드
+    user_preds: dict = {}
+    for gd in result_dates:
+        preds = _store.get_by_date(gd)
+        if manager_id is not None:
+            preds = [p for p in preds if p.manager_id == manager_id]
+        for p in preds:
+            user_preds[p.game_id] = p
 
     response = []
     for r in results:
