@@ -168,18 +168,9 @@ class NPBPipeline(DailyPipeline):
     def _parse_yahoo_html(self, html: str) -> list[dict]:
         """Yahoo Japan Baseball 스케줄 페이지 HTML 파싱.
 
-        Structure per game:
-            <p class="bb-score__homeLogo ...">巨人</p>
-            <p class="bb-score__awayLogo ...">阪神</p>
-            <span class="bb-score__score bb-score__score--left">3</span>
-            <span class="bb-score__score bb-score__score--center">-</span>
-            <span class="bb-score__score bb-score__score--right">1</span>
-
         Note: Yahoo's homeLogo = NPB.jp team1 (our away_team_id in game_id).
         """
         results = []
-
-        # Split by game items
         blocks = re.split(r'bb-score__item', html)[1:]
 
         for block in blocks:
@@ -188,32 +179,30 @@ class NPBPipeline(DailyPipeline):
             if not home_m or not away_m:
                 continue
 
-            # Yahoo homeLogo = NPB team1 = our "away" in game_id convention
             team1 = _NPB_TEAM_ALIAS.get(home_m.group(1).strip())
             team2 = _NPB_TEAM_ALIAS.get(away_m.group(1).strip())
             if not team1 or not team2:
                 continue
 
             venue_m = re.search(r'venue">([^<]+)', block)
-            venue = venue_m.group(1).strip() if venue_m else ""
-
             sl = re.search(r'score--left[^>]*>(\d+)', block)
             sr = re.search(r'score--right[^>]*>(\d+)', block)
-            finished = sl is not None and sr is not None
+            link_m = re.search(r'href="/npb/game/(\d+)', block)
 
             results.append({
                 "team1": team1,
                 "team2": team2,
                 "score1": int(sl.group(1)) if sl else None,
                 "score2": int(sr.group(1)) if sr else None,
-                "finished": finished,
-                "venue": venue,
+                "finished": sl is not None and sr is not None,
+                "venue": venue_m.group(1).strip() if venue_m else "",
+                "yahoo_game_id": link_m.group(1) if link_m else None,
             })
 
         return results
 
     def _build_results_from_yahoo(self, target_date: date) -> list[DailyResult]:
-        """Yahoo 데이터로 DailyResult 리스트 생성."""
+        """Yahoo 데이터로 DailyResult 리스트 생성 (상세 포함)."""
         yahoo = self._fetch_from_yahoo(target_date)
         if not yahoo:
             return []
@@ -225,7 +214,7 @@ class NPBPipeline(DailyPipeline):
                 continue
             game_id = f"npb_{target_date.isoformat()}_{s['team1']}_{s['team2']}"
             winner = "away" if s["score1"] > s["score2"] else "home"
-            results.append(DailyResult(
+            result = DailyResult(
                 game_id=game_id,
                 league_id="npb",
                 game_date=target_date.isoformat(),
@@ -235,8 +224,188 @@ class NPBPipeline(DailyPipeline):
                 home_score=s["score2"],
                 winner=winner,
                 game_type=gt,
-            ))
+            )
+
+            # Yahoo 개별 경기 페이지에서 상세 데이터 추가
+            if s.get("yahoo_game_id"):
+                self._enrich_result_from_yahoo(result, s["yahoo_game_id"])
+
+            results.append(result)
         return results
+
+    def _enrich_result_from_yahoo(self, result: DailyResult, yahoo_game_id: str) -> None:
+        """Yahoo 개별 경기 페이지에서 linescore, 투수 결정, 박스스코어 추가."""
+        base_url = f"https://baseball.yahoo.co.jp/npb/game/{yahoo_game_id}"
+
+        # top 페이지: linescore + 투수 결정 + 홈런
+        try:
+            resp = httpx.get(
+                f"{base_url}/top", headers=_HTTP_HEADERS, timeout=15, follow_redirects=True,
+            )
+            resp.raise_for_status()
+            self._parse_yahoo_top(resp.text, result)
+        except httpx.HTTPError as e:
+            logger.warning("Yahoo game top page fetch failed for %s: %s", yahoo_game_id, e)
+            return
+
+        # stats 페이지: 타자/투수 박스스코어
+        try:
+            resp = httpx.get(
+                f"{base_url}/stats", headers=_HTTP_HEADERS, timeout=15, follow_redirects=True,
+            )
+            resp.raise_for_status()
+            self._parse_yahoo_stats(resp.text, result)
+        except httpx.HTTPError as e:
+            logger.warning("Yahoo game stats page fetch failed for %s: %s", yahoo_game_id, e)
+
+    def _parse_yahoo_top(self, html: str, result: DailyResult) -> None:
+        """Yahoo top 페이지에서 linescore, 투수 결정 파싱."""
+
+        # ── Linescore ──
+        ls_table = re.search(r'bb-gameScoreTable--scoreboard(.*?)</table>', html, re.DOTALL)
+        if ls_table:
+            rows = re.findall(r'<tr[^>]*>(.*?)</tr>', ls_table.group(1), re.DOTALL)
+            for row in rows:
+                cells = re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, re.DOTALL)
+                cells_clean = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+                if len(cells_clean) < 3 or not cells_clean[0]:
+                    continue  # header row
+
+                team_name = cells_clean[0]
+                # 이닝 점수: cells[1:-3] (마지막 3개는 計=합계, 安=안타, 失=실책)
+                inning_cells = cells_clean[1:-3]
+                innings = []
+                for ic in inning_cells:
+                    try:
+                        innings.append(int(ic))
+                    except ValueError:
+                        innings.append(0)  # 'X' 등
+
+                hits = int(cells_clean[-2]) if cells_clean[-2].isdigit() else 0
+                errors = int(cells_clean[-1]) if cells_clean[-1].isdigit() else 0
+
+                # team1(=away_team_id in our convention) 이 Yahoo homeLogo
+                # Yahoo linescore: 첫 번째 팀행 = away(Yahoo), 두 번째 = home(Yahoo)
+                # 하지만 우리 convention에서 team1=Yahoo home, team2=Yahoo away
+                # Yahoo top page에서 linescore 순서는 visitor 먼저
+                if _NPB_TEAM_ALIAS.get(team_name) == result.home_team_id:
+                    # Yahoo의 visitor = 우리의 home_team_id (team2)
+                    result.home_innings = innings
+                    result.home_hits = hits
+                    result.home_errors = errors
+                elif _NPB_TEAM_ALIAS.get(team_name) == result.away_team_id:
+                    # Yahoo의 home = 우리의 away_team_id (team1)
+                    result.away_innings = innings
+                    result.away_hits = hits
+                    result.away_errors = errors
+
+        # ── 투수 결정 ──
+        for keyword, attr in [('勝利投手', 'winning_pitcher'),
+                               ('敗戦投手', 'losing_pitcher'),
+                               ('セーブ', 'save_pitcher')]:
+            idx = html.find(keyword)
+            if idx > 0:
+                snippet = html[idx:idx + 500]
+                player = re.search(r'bb-gameTable__player[^>]*>([^<]+)', snippet)
+                if player:
+                    setattr(result, attr, player.group(1).strip())
+
+        # ── 홈런 ──
+        hr_match = re.search(r'本塁打\s*</dt>(.*?)</dd>', html, re.DOTALL)
+        if hr_match:
+            hr_text = re.sub(r'<[^>]+>', ' ', hr_match.group(1))
+            hr_text = re.sub(r'\s+', ' ', hr_text).strip()
+            if hr_text:
+                result.scoring_plays.append({
+                    "inning": 0, "half": "", "event": "HR",
+                    "description": hr_text, "rbi": 0,
+                })
+
+    def _parse_yahoo_stats(self, html: str, result: DailyResult) -> None:
+        """Yahoo stats 페이지에서 타자/투수 박스스코어 파싱."""
+
+        # 타자: bb-statsTable, 투수: bb-scoreTable (Yahoo의 클래스명이 다름)
+        batting_tables = []
+        pitching_tables = []
+        for table_m in re.finditer(r'<table[^>]*class="([^"]*)"[^>]*>(.*?)</table>', html, re.DOTALL):
+            cls, content = table_m.group(1), table_m.group(2)
+            header_row = re.search(r'<tr[^>]*>(.*?)</tr>', content, re.DOTALL)
+            if not header_row:
+                continue
+            header_text = re.sub(r'<[^>]+>', ' ', header_row.group(1))
+            if 'bb-statsTable' in cls and '打数' in header_text:
+                batting_tables.append(content)
+            elif 'bb-scoreTable' in cls and '投球回' in header_text:
+                pitching_tables.append(content)
+
+        # ── 타자 박스스코어 ──
+        # Yahoo page: table 0 = visitor (Yahoo away = our home), table 1 = home (Yahoo home = our away)
+        for i, table in enumerate(batting_tables[:2]):
+            batters = self._parse_batting_table(table)
+            if i == 0:
+                result.home_batters = batters  # Yahoo visitor = our home
+            else:
+                result.away_batters = batters  # Yahoo home = our away
+
+        # ── 투수 박스스코어 ──
+        for i, table in enumerate(pitching_tables[:2]):
+            pitchers = self._parse_pitching_table(table)
+            if i == 0:
+                result.home_pitchers = pitchers
+            else:
+                result.away_pitchers = pitchers
+
+    @staticmethod
+    def _parse_batting_table(table_html: str) -> list[dict]:
+        """타자 스탯 테이블 파싱 → MLB 호환 format."""
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', table_html, re.DOTALL)
+        batters = []
+        for row in rows[1:]:  # skip header
+            cells = re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, re.DOTALL)
+            cells_clean = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+            # Columns: 位置, 選手名, 打率, 打数, 得点, 安打, 打点, 三振, 四球, ...
+            if len(cells_clean) < 9 or not cells_clean[1]:
+                continue
+            try:
+                batters.append({
+                    "name": cells_clean[1],
+                    "pos": cells_clean[0],
+                    "ab": int(cells_clean[3]) if cells_clean[3].isdigit() else 0,
+                    "r": int(cells_clean[4]) if cells_clean[4].isdigit() else 0,
+                    "h": int(cells_clean[5]) if cells_clean[5].isdigit() else 0,
+                    "rbi": int(cells_clean[6]) if cells_clean[6].isdigit() else 0,
+                    "k": int(cells_clean[7]) if cells_clean[7].isdigit() else 0,
+                    "bb": int(cells_clean[8]) if cells_clean[8].isdigit() else 0,
+                })
+            except (IndexError, ValueError):
+                continue
+        return batters
+
+    @staticmethod
+    def _parse_pitching_table(table_html: str) -> list[dict]:
+        """투수 스탯 테이블 파싱 → MLB 호환 format."""
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', table_html, re.DOTALL)
+        pitchers = []
+        for row in rows[1:]:  # skip header
+            cells = re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, re.DOTALL)
+            cells_clean = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+            # Columns: 勝敗, 選手名, 防御率, 投球回, 投球数, 打者, 被安打, 被本塁打, 奪三振, 与四球, 与死球, ボーク, 失点, 自責点
+            if len(cells_clean) < 14 or not cells_clean[1]:
+                continue
+            try:
+                pitchers.append({
+                    "name": cells_clean[1],
+                    "ip": cells_clean[3],
+                    "h": int(cells_clean[6]) if cells_clean[6].isdigit() else 0,
+                    "r": int(cells_clean[12]) if cells_clean[12].isdigit() else 0,
+                    "er": int(cells_clean[13]) if cells_clean[13].isdigit() else 0,
+                    "bb": int(cells_clean[9]) if cells_clean[9].isdigit() else 0,
+                    "k": int(cells_clean[8]) if cells_clean[8].isdigit() else 0,
+                    "hr": int(cells_clean[7]) if cells_clean[7].isdigit() else 0,
+                })
+            except (IndexError, ValueError):
+                continue
+        return pitchers
 
     def _build_results_from_games_cache(self, target_date: date) -> list[DailyResult]:
         """Games 캐시에서 Final 경기를 결과로 변환."""
