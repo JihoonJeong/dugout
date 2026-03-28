@@ -86,6 +86,10 @@ class KBOPipeline(DailyPipeline):
         games = self._fetch_from_api(target_date)
         results = []
 
+        # API raw data도 함께 보관 (투수 결정 등 추가 정보용)
+        raw_games = self._fetch_from_api(target_date, return_raw=True)
+        raw_map = {r.get("G_ID", ""): r for r in raw_games}
+
         for g in games:
             if g.away_score is None or g.home_score is None:
                 continue
@@ -94,6 +98,7 @@ class KBOPipeline(DailyPipeline):
                 continue
 
             winner = "away" if g.away_score > g.home_score else "home"
+            raw = raw_map.get(g.game_id, {})
             results.append(DailyResult(
                 game_id=g.game_id,
                 league_id="kbo",
@@ -106,6 +111,9 @@ class KBOPipeline(DailyPipeline):
                 away_starter_name=g.away_starter_name,
                 home_starter_name=g.home_starter_name,
                 game_type=g.game_type,
+                winning_pitcher=(raw.get("W_PIT_P_NM") or "").strip(),
+                losing_pitcher=(raw.get("L_PIT_P_NM") or "").strip(),
+                save_pitcher=(raw.get("SV_PIT_P_NM") or "").strip(),
             ))
 
         logger.info("Found %d KBO results for %s", len(results), date_str)
@@ -116,8 +124,12 @@ class KBOPipeline(DailyPipeline):
 
         return results
 
-    def _fetch_from_api(self, target_date: date) -> list[DailyGame]:
-        """KBO GameCenter API 호출."""
+    def _fetch_from_api(self, target_date: date, return_raw: bool = False) -> list:
+        """KBO GameCenter API 호출.
+
+        Args:
+            return_raw: True면 원본 dict 리스트 반환, False면 DailyGame 리스트.
+        """
         date_str = target_date.strftime("%Y%m%d")
 
         try:
@@ -140,6 +152,9 @@ class KBOPipeline(DailyPipeline):
         rows = data.get("game", [])
         if not isinstance(rows, list):
             return []
+
+        if return_raw:
+            return rows
 
         games = []
         for row in rows:
