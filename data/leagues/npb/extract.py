@@ -56,6 +56,7 @@ class NPBBatterRaw:
     strikeouts: int
     gdp: int
     avg: float
+    hand: str = "R"  # "L" if name had * prefix on npb.jp, else "R"
 
 
 @dataclass
@@ -80,6 +81,7 @@ class NPBPitcherRaw:
     strikeouts: int
     runs: int
     earned_runs: int
+    hand: str = "R"  # "L" if name had * prefix on npb.jp, else "R"
 
 
 def _parse_table_rows(html: str) -> list[list[str]]:
@@ -104,12 +106,16 @@ def _parse_table_rows(html: str) -> list[list[str]]:
     return results
 
 
-def _clean_name(name: str) -> str:
-    """Clean player name: remove handedness marker (*) and normalize whitespace."""
+def _clean_name(name: str) -> tuple[str, str]:
+    """Clean player name and extract handedness from * prefix.
+
+    NPB.jp uses * prefix to indicate left-handed batters/pitchers.
+    Returns (cleaned_name, hand) where hand is "L" or "R".
+    """
+    hand = "L" if name.startswith('*') else "R"
     name = name.lstrip('*')
-    # Replace full-width space with regular space, then strip
     name = name.replace('\u3000', ' ').strip()
-    return name
+    return name, hand
 
 
 def _parse_ip(ip_str: str) -> float:
@@ -202,7 +208,7 @@ def fetch_batting_stats(
             #          HR(8), TB(9), RBI(10), SB(11), CS(12), SAC(13), SF(14),
             #          BB(15), IBB(16), HBP(17), K(18), GIDP(19), AVG(20), SLG(21), OBP(22)
             try:
-                name = _clean_name(cells[0])
+                name, hand = _clean_name(cells[0])
                 if not name or name in ('合計', '投手合計', 'チーム合計'):
                     continue
 
@@ -225,6 +231,7 @@ def fetch_batting_stats(
                     strikeouts=_safe_int(cells[18]),
                     gdp=_safe_int(cells[19]),
                     avg=_safe_float(cells[20]),
+                    hand=hand,
                 )
                 all_batters.append(batter)
                 count += 1
@@ -287,7 +294,7 @@ def fetch_pitching_stats(
             #          H(13), HR(14), BB(15), IBB(16), HBP(17), K(18),
             #          WP(19), BK(20), R(21), ER(22), ERA(23)
             try:
-                name = _clean_name(cells[0])
+                name, hand = _clean_name(cells[0])
                 if not name or name in ('合計', 'チーム合計'):
                     continue
 
@@ -311,6 +318,7 @@ def fetch_pitching_stats(
                     runs=_safe_int(cells[21]),
                     earned_runs=_safe_int(cells[22]),
                     era=_safe_float(cells[23]),
+                    hand=hand,
                 )
                 all_pitchers.append(pitcher)
                 count += 1

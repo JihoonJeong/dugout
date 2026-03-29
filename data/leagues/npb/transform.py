@@ -107,7 +107,7 @@ def convert_batter(
     return BatterStats(
         player_id=f"npb_{raw.name}_{raw.team_id}",
         name=raw.name,
-        hand="R",  # NPB doesn't provide handedness in basic stats
+        hand=raw.hand,
         pa=raw.pa,
         k_rate=k_rate,
         bb_rate=bb_rate,
@@ -148,7 +148,7 @@ def convert_pitcher(
     return PitcherStats(
         player_id=f"npb_{raw.name}_{raw.team_id}",
         name=raw.name,
-        hand="R",  # default
+        hand=raw.hand,
         pa_against=raw.tbf,
         k_rate=k_rate,
         bb_rate=bb_rate,
