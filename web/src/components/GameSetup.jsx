@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { Play } from 'lucide-react';
 
-const TEAMS = [
-  'ARI','ATH','ATL','BAL','BOS','CHC','CHW','CIN','CLE','COL','DET',
-  'HOU','KCR','LAA','LAD','MIA','MIL','MIN','NYM','NYY',
-  'PHI','PIT','SDP','SEA','SFG','STL','TBR','TEX','TOR','WSN',
-];
+const LEAGUE_TEAMS = {
+  MLB: [
+    'ARI','ATH','ATL','BAL','BOS','CHC','CHW','CIN','CLE','COL','DET',
+    'HOU','KCR','LAA','LAD','MIA','MIL','MIN','NYM','NYY',
+    'PHI','PIT','SDP','SEA','SFG','STL','TBR','TEX','TOR','WSN',
+  ],
+  KBO: ['LG','두산','KIA','삼성','롯데','한화','SSG','NC','KT','키움'],
+  NPB: ['巨人','阪神','中日','DeNA','広島','ヤクルト','オリックス','ソフトバンク','西武','楽天','ロッテ','日本ハム'],
+};
 
 const PHILOSOPHIES = [
   { value: 'analytics', label: 'Analytics' },
@@ -47,20 +51,22 @@ export default function GameSetup({ onStart, onBack }) {
 
         {/* Teams */}
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Away</label>
-            <select value={away} onChange={e => setAway(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-lg">
-              {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Home</label>
-            <select value={home} onChange={e => setHome(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-lg">
-              {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
+          {[
+            { label: 'Away', value: away, setter: setAway },
+            { label: 'Home', value: home, setter: setHome },
+          ].map(({ label, value, setter }) => (
+            <div key={label}>
+              <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">{label}</label>
+              <select value={value} onChange={e => setter(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-lg">
+                {Object.entries(LEAGUE_TEAMS).map(([league, teams]) => (
+                  <optgroup key={league} label={league}>
+                    {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          ))}
         </div>
 
         {/* Mode */}
