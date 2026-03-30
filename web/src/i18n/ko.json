@@ -5,8 +5,9 @@
     "beta": "더그아웃은 베타 서비스이며 무료 서버를 사용합니다. 첫 로딩에 1분 이상 걸릴 수 있습니다. 잠시만 기다려 주세요!"
   },
   "nav": {
-    "todayGames": "오늘의 경기",
-    "yesterday": "어제 결과",
+    "todayGames": "오늘",
+    "tomorrow": "내일",
+    "yesterday": "어제",
     "stats": "성적",
     "ranks": "순위",
     "settings": "설정"
@@ -20,9 +21,12 @@
     "preseason": "시범 경기"
   },
   "daily": {
-    "gamesCount": "오늘 {count}경기",
+    "gamesCount": "{count}경기",
+    "tomorrowGamesCount": "내일 {count}경기",
     "noGames": "오늘 경기가 없습니다",
     "noGamesLeague": "오늘 {league} 경기가 없습니다",
+    "noGamesTomorrow": "내일 경기가 없습니다",
+    "noGamesTomorrowLeague": "내일 {league} 경기가 없습니다",
     "noResults": "어제 결과가 없습니다",
     "noResultsLeague": "어제 {league} 결과가 없습니다",
     "loadingSchedule": "경기 일정 로딩 중...",

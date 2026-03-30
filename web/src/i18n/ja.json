@@ -5,8 +5,9 @@
     "beta": "ダグアウトはベータ版で、無料サーバーを使用しています。初回ロードに1分以上かかる場合があります。しばらくお待ちください！"
   },
   "nav": {
-    "todayGames": "今日の試合",
-    "yesterday": "昨日の結果",
+    "todayGames": "今日",
+    "tomorrow": "明日",
+    "yesterday": "昨日",
     "stats": "成績",
     "ranks": "順位",
     "settings": "設定"
@@ -20,9 +21,12 @@
     "preseason": "オープン戦"
   },
   "daily": {
-    "gamesCount": "今日{count}試合",
+    "gamesCount": "{count}試合",
+    "tomorrowGamesCount": "明日{count}試合",
     "noGames": "今日の試合はありません",
     "noGamesLeague": "今日の{league}の試合はありません",
+    "noGamesTomorrow": "明日の試合はありません",
+    "noGamesTomorrowLeague": "明日の{league}の試合はありません",
     "noResults": "昨日の結果はありません",
     "noResultsLeague": "昨日の{league}の結果はありません",
     "loadingSchedule": "スケジュール読み込み中...",

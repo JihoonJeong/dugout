@@ -30,11 +30,14 @@ const LEAGUE_IDS = ['all', 'mlb', 'kbo', 'npb'];
 export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   const { t, lang, setLang } = useLanguage();
   const [showToday, setShowToday] = useState(true);
+  const [showTomorrow, setShowTomorrow] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [league, setLeague] = useState('all');
   const [games, setGames] = useState([]);
+  const [tomorrowGames, setTomorrowGames] = useState([]);
   const [results, setResults] = useState([]);
   const [loadingGames, setLoadingGames] = useState(true);
+  const [loadingTomorrow, setLoadingTomorrow] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
   const [showStats, setShowStats] = useState(false);
@@ -47,10 +50,22 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
   }, []);
 
   useEffect(() => {
+    if (showTomorrow && tomorrowGames.length === 0 && !loadingTomorrow) {
+      loadTomorrowGames();
+    }
+  }, [showTomorrow]);
+
+  useEffect(() => {
     if (showResults && results.length === 0 && !loadingResults) {
       loadResults();
     }
   }, [showResults]);
+
+  function getTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
 
   async function loadGames() {
     setLoadingGames(true);
@@ -61,6 +76,17 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
       console.error('Failed to load games:', e);
     }
     setLoadingGames(false);
+  }
+
+  async function loadTomorrowGames() {
+    setLoadingTomorrow(true);
+    try {
+      const data = await getDailyGames(getTomorrowDate());
+      setTomorrowGames(data);
+    } catch (e) {
+      console.error('Failed to load tomorrow games:', e);
+    }
+    setLoadingTomorrow(false);
   }
 
   async function loadResults() {
@@ -76,13 +102,15 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
 
   async function loadData() {
     loadGames();
+    if (showTomorrow) loadTomorrowGames();
     if (showResults) loadResults();
   }
 
   const filteredGames = league === 'all' ? games : games.filter(g => (g.league_id || 'mlb') === league);
+  const filteredTomorrow = league === 'all' ? tomorrowGames : tomorrowGames.filter(g => (g.league_id || 'mlb') === league);
   const filteredResults = league === 'all' ? results : results.filter(r => (r.league_id || 'mlb') === league);
 
-  const sourceList = [...games, ...results];
+  const sourceList = [...games, ...tomorrowGames, ...results];
   const leagueCounts = {};
   for (const item of sourceList) {
     const lid = item.league_id || 'mlb';
@@ -171,6 +199,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
           <div className="flex gap-1 bg-slate-900/50 rounded-lg p-1">
             {[
               { key: 'today', label: t('nav.todayGames'), active: showToday, toggle: () => setShowToday(s => !s) },
+              { key: 'tomorrow', label: t('nav.tomorrow'), active: showTomorrow, toggle: () => setShowTomorrow(s => !s) },
               { key: 'results', label: t('nav.yesterday'), active: showResults, toggle: () => setShowResults(s => !s) },
               { key: 'stats', label: t('nav.stats'), active: showStats, toggle: () => setShowStats(s => !s) },
               { key: 'ranks', label: t('nav.ranks'), active: showLeaderboard, toggle: () => setShowLeaderboard(s => !s) },
@@ -247,6 +276,34 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
           )
         )}
 
+        {showTomorrow && (
+          loadingTomorrow ? (
+            <div className="text-center py-8 text-slate-400 mb-6">{t('daily.loadingSchedule')}</div>
+          ) : filteredTomorrow.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 mb-6">
+              {league !== 'all'
+                ? t('daily.noGamesTomorrowLeague', { league: league.toUpperCase() })
+                : t('daily.noGamesTomorrow')}
+            </div>
+          ) : (
+            <div className="space-y-4 mb-6">
+              <div className="text-sm text-slate-400 mb-2">
+                {t('daily.tomorrowGamesCount', { count: filteredTomorrow.length })}
+              </div>
+              {filteredTomorrow.map(game => (
+                <GameCard
+                  key={`tmr-${game.league_id || 'mlb'}-${game.game_id}`}
+                  game={game}
+                  teamNames={TEAM_NAMES}
+                  onSelect={() => setSelectedGame(game)}
+                  onPredictionSubmit={loadData}
+                  onWatchSim={(away, home) => onWatchSim?.(away, home)}
+                />
+              ))}
+            </div>
+          )
+        )}
+
         {showResults && (
           loadingResults ? (
             <div className="text-center py-8 text-slate-400 mb-6">Loading results...</div>
@@ -268,7 +325,7 @@ export default function DailyHome({ onNavigateToGame, onWatchSim }) {
           )
         )}
 
-        {!showToday && !showResults && !showStats && !showLeaderboard && (
+        {!showToday && !showTomorrow && !showResults && !showStats && !showLeaderboard && (
           <div className="text-center py-12 text-slate-500 text-sm">
             Select a section above
           </div>

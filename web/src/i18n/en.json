@@ -5,8 +5,9 @@
     "beta": "Dugout is in beta and runs on a free-tier server that sleeps when idle. The first load may take over a minute — thank you for your patience!"
   },
   "nav": {
-    "todayGames": "Today's Games",
-    "yesterday": "Yesterday's Results",
+    "todayGames": "Today",
+    "tomorrow": "Tomorrow",
+    "yesterday": "Yesterday",
     "stats": "Stats",
     "ranks": "Ranks",
     "settings": "Settings"
@@ -20,9 +21,12 @@
     "preseason": "Preseason"
   },
   "daily": {
-    "gamesCount": "{count} game(s) today",
+    "gamesCount": "{count} game(s)",
+    "tomorrowGamesCount": "{count} game(s) tomorrow",
     "noGames": "No games scheduled for today",
     "noGamesLeague": "No {league} games scheduled for today",
+    "noGamesTomorrow": "No games scheduled for tomorrow",
+    "noGamesTomorrowLeague": "No {league} games scheduled for tomorrow",
     "noResults": "No results from yesterday",
     "noResultsLeague": "No {league} results from yesterday",
     "loadingSchedule": "Loading schedule...",
