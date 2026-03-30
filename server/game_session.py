@@ -8,7 +8,12 @@ from typing import Optional
 
 import numpy as np
 
-from data.constants import TEAM_MAPPING
+from data.constants import TEAM_MAPPING as _MLB_TEAM_MAPPING
+from data.leagues.kbo.teams import TEAM_MAPPING as _KBO_TEAM_MAPPING
+from data.leagues.npb.teams import TEAM_MAPPING as _NPB_TEAM_MAPPING
+
+# 모든 리그 팀 매핑 통합
+TEAM_MAPPING = {**_MLB_TEAM_MAPPING, **_KBO_TEAM_MAPPING, **_NPB_TEAM_MAPPING}
 from engine.at_bat import simulate_at_bat
 from engine.constants import MANFRED_RUNNER_INNING
 from engine.models import (

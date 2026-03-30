@@ -17,18 +17,43 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+import logging
+
 from data.pipeline import DugoutDataPipeline
+from data.leagues.kbo.pipeline import build_kbo_data
+from data.leagues.npb.pipeline import build_npb_data
 from .game_session import GameSessionManager
 from .routes import router, set_session_manager
 from .daily_routes import router as daily_router, init_daily
 from .advisor_routes import router as advisor_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pipeline = DugoutDataPipeline(season=2025)
     data = pipeline.load_all()
-    mgr = GameSessionManager(data.teams, data.parks, data.league)
+
+    # KBO/NPB 데이터 로드 → 시뮬레이션에도 사용
+    all_teams = dict(data.teams)
+    all_parks = dict(data.parks)
+    try:
+        kbo = build_kbo_data()
+        all_teams.update(kbo.teams)
+        all_parks.update(kbo.parks)
+        logger.info("KBO teams added to sim: %d", len(kbo.teams))
+    except Exception as e:
+        logger.warning("KBO data for sim failed: %s", e)
+    try:
+        npb = build_npb_data()
+        all_teams.update(npb.teams)
+        all_parks.update(npb.parks)
+        logger.info("NPB teams added to sim: %d", len(npb.teams))
+    except Exception as e:
+        logger.warning("NPB data for sim failed: %s", e)
+
+    mgr = GameSessionManager(all_teams, all_parks, data.league)
     set_session_manager(mgr)
     init_daily(data)
     yield
